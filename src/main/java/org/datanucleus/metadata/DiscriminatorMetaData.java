@@ -37,16 +37,16 @@ public class DiscriminatorMetaData extends MetaData
     /** Column name of discriminator */
     protected String columnName = null;
 
-    /** Value for discriminator column */
+    /** Discriminator column */
+    protected ColumnMetaData columnMetaData=null;
+
+    /** Value for discriminator column, when using VALUE_MAP. */
     protected String value = null;
 
     /** Whether the discriminator is indexed or not and whether it is unique */
     protected IndexedValue indexed = null;
 
-    /** Discriminator column */
-    protected ColumnMetaData columnMetaData=null;
-
-    /** Definition of any indexing of the discriminator column. */
+    /** Definition of any indexing of the discriminator column. TODO Drop this since it doesn't add to what we already have. */
     protected IndexMetaData indexMetaData;
 
     public DiscriminatorMetaData()
@@ -75,11 +75,12 @@ public class DiscriminatorMetaData extends MetaData
     }
 
     /**
-     * Initialisation method. This should be called AFTER using the populate
-     * method if you are going to use populate. It creates the internal
-     * convenience arrays etc needed for normal operation.
+     * Initialisation method. 
+     * This should be called AFTER using the populate method if you are going to use populate. 
+     * It creates the internal convenience arrays etc needed for normal operation.
+     * @param clr Not used
      */
-    public void initialise(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public void initialise(ClassLoaderResolver clr)
     {
         if (value != null && strategy == null)
         {
@@ -258,55 +259,5 @@ public class DiscriminatorMetaData extends MetaData
     {
         this.indexed = IndexedValue.getIndexedValue(indexed);
         return this;
-    }
-
-    //  ----------------------------- Utilities ---------------------------------
-
-    /**
-     * Returns a string representation of the object using a prefix
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<discriminator");
-        if (strategy != null)
-        {
-            sb.append(" strategy=\"" + strategy.toString() + "\"");
-        }
-        if (columnName != null && columnMetaData == null)
-        {
-            sb.append(" column=\"" + columnName + "\"");
-        }
-        if (value != null)
-        {
-            sb.append(" value=\"" + value + "\"");
-        }
-        if (indexed != null)
-        {
-            sb.append(" indexed=\"" + indexed.toString() + "\"");
-        }
-        sb.append(">\n");
-
-        // Column MetaData
-        if (columnMetaData != null)
-        {
-            sb.append(columnMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add index
-        if (indexMetaData != null)
-        {
-            sb.append(indexMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</discriminator>\n");
-
-        return sb.toString();
     }
 }

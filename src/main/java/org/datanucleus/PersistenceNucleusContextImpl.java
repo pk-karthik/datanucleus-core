@@ -73,7 +73,7 @@ import org.datanucleus.store.schema.SchemaScriptAwareStoreManager;
 import org.datanucleus.store.schema.SchemaTool;
 import org.datanucleus.store.schema.SchemaTool.Mode;
 import org.datanucleus.transaction.NucleusTransactionException;
-import org.datanucleus.transaction.TransactionManager;
+import org.datanucleus.transaction.ResourcedTransactionManager;
 import org.datanucleus.transaction.jta.JTASyncRegistry;
 import org.datanucleus.transaction.jta.JTASyncRegistryUnavailableException;
 import org.datanucleus.transaction.jta.TransactionManagerFinder;
@@ -84,8 +84,7 @@ import org.datanucleus.util.StringUtils;
 /**
  * Extends the basic DataNucleus context, adding on services for
  * <ul>
- * <li>creating <i>ExecutionContext</i> objects to handle persistence. Uses a pool of
- *     <i>ExecutionContext</i> objects, reusing them as required.</li>
+ * <li>creating <i>ExecutionContext</i> objects to handle persistence. Uses a pool of <i>ExecutionContext</i> objects, reusing them as required.</li>
  * <li>providing a cache across <i>ExecutionContext</i> objects (the "Level 2" cache).</li>
  * <li>provides a factory for creating <i>ObjectProviders</i>. This factory makes use of pooling, allowing reuse.</li>
  * <li>provides access to the datastore via a <i>StoreManager</i></li>
@@ -109,8 +108,8 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     /** Level 2 Cache, caching across ExecutionContexts. */
     private Level2Cache cache;
 
-    /** Transaction Manager. */
-    private transient TransactionManager txManager = null;
+    /** ResourcedTransaction Manager. */
+    private transient ResourcedTransactionManager txManager = null;
 
     /** JTA Transaction Manager (if using JTA). */
     private transient javax.transaction.TransactionManager jtaTxManager = null;
@@ -203,12 +202,12 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
 
         // Transactions
         conf.addDefaultProperty(PropertyNames.PROPERTY_TRANSACTION_TYPE, null, null, CorePropertyValidator.class.getName(), false, false);
-        conf.addDefaultProperty(PropertyNames.PROPERTY_TRANSACTION_JTA_LOCATOR, null, null, null, false, false);
-        conf.addDefaultProperty(PropertyNames.PROPERTY_TRANSACTION_JTA_JNDI_LOCATION, null, null, null, false, false);
         conf.addDefaultProperty(PropertyNames.PROPERTY_TRANSACTION_ISOLATION, null, "read-committed", CorePropertyValidator.class.getName(), false, false);
-        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_NONTX_READ, null, true, false, true);
-        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_NONTX_WRITE, null, true, false, true);
-        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_NONTX_ATOMIC, null, true, false, true);
+        conf.addDefaultProperty(PropertyNames.PROPERTY_TRANSACTION_JTA_LOCATOR, null, "autodetect", null, false, false);
+        conf.addDefaultProperty(PropertyNames.PROPERTY_TRANSACTION_JTA_JNDI_LOCATION, null, null, null, false, false);
+        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_READ, null, true, false, true);
+        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_WRITE, null, true, false, true);
+        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_ATOMIC, null, true, false, true);
 
         // Flush process
         conf.addDefaultIntegerProperty(PropertyNames.PROPERTY_FLUSH_AUTO_OBJECT_LIMIT, null, 1, false, false);
@@ -233,7 +232,6 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
         conf.addDefaultProperty(PropertyNames.PROPERTY_DATASTORE_READONLY_ACTION, null, "EXCEPTION", CorePropertyValidator.class.getName(), false, true);
 
         // Schema Generation
-        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_SCHEMA_GENERATE_CREATE_SCHEMAS, null, false, false, false);
         conf.addDefaultProperty(PropertyNames.PROPERTY_SCHEMA_GENERATE_DATABASE_MODE, null, "none", CorePropertyValidator.class.getName(), false, false);
         conf.addDefaultProperty(PropertyNames.PROPERTY_SCHEMA_GENERATE_SCRIPTS_MODE, null, "none", CorePropertyValidator.class.getName(), false, false);
         conf.addDefaultProperty(PropertyNames.PROPERTY_SCHEMA_GENERATE_SCRIPTS_CREATE_TARGET, null, "datanucleus-schema-create.ddl", null, false, false);
@@ -272,10 +270,11 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
         // Queries
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_SQL_ALLOWALL, null, false, false, true);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_JDOQL_ALLOWALL, null, false, false, true);
+        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_JPQL_ALLOW_RANGE, null, false, false, true);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_FLUSH_BEFORE_EXECUTE, null, false, false, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_USE_FETCHPLAN, null, true, false, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_CHECK_UNUSED_PARAMS, null, true, false, false);
-        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_COMPILE_OPTIMISED, null, false, false, false);
+        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_COMPILE_OPTIMISE_VAR_THIS, null, false, false, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_LOAD_RESULTS_AT_COMMIT, null, true, false, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_COMPILATION_CACHED, null, true, false, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_QUERY_RESULTS_CACHED, null, false, false, false);
@@ -305,10 +304,13 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
         conf.addDefaultProperty(PropertyNames.PROPERTY_DETACH_DETACHED_STATE, null, "fetch-groups", CorePropertyValidator.class.getName(), false, false); // TODO Change last arg to true
         conf.addDefaultIntegerProperty(PropertyNames.PROPERTY_MAX_FETCH_DEPTH, null, 1, false, true);
 
+        conf.addDefaultIntegerProperty(PropertyNames.PROPERTY_VERSION_NUMBER_INITIAL_VALUE, null, 1, false, true);
+        conf.addDefaultProperty(PropertyNames.PROPERTY_RELATION_IDENTITY_STORAGE_MODE, null, StoreManager.RELATION_IDENTITY_STORAGE_PERSISTABLE_IDENTITY, null, false, false);
+
         // ========================= Generally all properties below here are specified at the StoreManager level =============================
 
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_SCHEMA_AUTOCREATE_ALL, null, false, true, false);
-        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_SCHEMA_AUTOCREATE_SCHEMA, null, false, true, false);
+        conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_SCHEMA_AUTOCREATE_DATABASE, null, false, true, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_SCHEMA_AUTOCREATE_TABLES, null, false, true, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_SCHEMA_AUTOCREATE_COLUMNS, null, false, true, false);
         conf.addDefaultBooleanProperty(PropertyNames.PROPERTY_SCHEMA_AUTOCREATE_CONSTRAINTS, null, false, true, false);
@@ -581,6 +583,8 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
         }
 
         identityManager = null;
+
+        super.close();
     }
 
     /**
@@ -784,8 +788,8 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
                 (config.getBooleanProperty(PropertyNames.PROPERTY_MULTITHREADED) ? "pm-multithreaded" : "pm-singlethreaded") +
                 (config.getBooleanProperty(PropertyNames.PROPERTY_RETAIN_VALUES) ? ", retain-values" : "") +
                 (config.getBooleanProperty(PropertyNames.PROPERTY_RESTORE_VALUES) ? ", restore-values" : "") +
-                (config.getBooleanProperty(PropertyNames.PROPERTY_NONTX_READ) ? ", nontransactional-read" : "") +
-                (config.getBooleanProperty(PropertyNames.PROPERTY_NONTX_WRITE) ? ", nontransactional-write" : "") +
+                (config.getBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_READ) ? ", nontransactional-read" : "") +
+                (config.getBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_WRITE) ? ", nontransactional-write" : "") +
                 (config.getBooleanProperty(PropertyNames.PROPERTY_PERSISTENCE_BY_REACHABILITY_AT_COMMIT) ? ", reachability-at-commit" : "") +
                 (config.getBooleanProperty(PropertyNames.PROPERTY_DETACH_ALL_ON_COMMIT) ? ", detach-all-on-commit" : "") +
                 (config.getBooleanProperty(PropertyNames.PROPERTY_DETACH_ALL_ON_ROLLBACK) ? ", detach-all-on-rollback" : "") +
@@ -1196,7 +1200,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getImplementationCreator()
+     * @see org.datanucleus.PersistenceNucleusContext#getImplementationCreator()
      */
     @Override
     public synchronized ImplementationCreator getImplementationCreator()
@@ -1213,28 +1217,28 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getTransactionManager()
+     * @see org.datanucleus.PersistenceNucleusContext#getResourcedTransactionManager()
      */
     @Override
-    public synchronized TransactionManager getTransactionManager()
+    public synchronized ResourcedTransactionManager getResourcedTransactionManager()
     {
         if (txManager == null)
         {
-            txManager = new TransactionManager();
+            txManager = new ResourcedTransactionManager();
         }
         return txManager;
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getJtaTransactionManager()
+     * @see org.datanucleus.PersistenceNucleusContext#getJtaTransactionManager()
      */
     @Override
     public synchronized javax.transaction.TransactionManager getJtaTransactionManager()
     {
         if (jtaTxManager == null)
         {
-            // Find the JTA transaction manager - before J2EE 5 there is no standard way to do this so use the finder process.
-            // See http://www.onjava.com/pub/a/onjava/2005/07/20/transactions.html
+            // Find the JTA transaction manager - there is no standard way to do this so use the finder process.
+            // See also http://www.onjava.com/pub/a/onjava/2005/07/20/transactions.html
             jtaTxManager = new TransactionManagerFinder(this).getTransactionManager(getClassLoaderResolver((ClassLoader)config.getProperty(PropertyNames.PROPERTY_CLASSLOADER_PRIMARY)));
             if (jtaTxManager == null)
             {
@@ -1245,7 +1249,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getJtaSyncRegistry()
+     * @see org.datanucleus.PersistenceNucleusContext#getJtaSyncRegistry()
      */
     @Override
     public JTASyncRegistry getJtaSyncRegistry()
@@ -1293,7 +1297,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getValidationHandler(org.datanucleus.ExecutionContext)
+     * @see org.datanucleus.PersistenceNucleusContext#getValidationHandler(org.datanucleus.ExecutionContext)
      */
     @Override
     public CallbackHandler getValidationHandler(ExecutionContext ec)
@@ -1453,7 +1457,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     // --------------------------- Fetch Groups ---------------------------------
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getFetchGroupManager()
+     * @see org.datanucleus.PersistenceNucleusContext#getFetchGroupManager()
      */
     @Override
     public synchronized FetchGroupManager getFetchGroupManager()
@@ -1466,7 +1470,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#addInternalFetchGroup(org.datanucleus.FetchGroup)
+     * @see org.datanucleus.PersistenceNucleusContext#addInternalFetchGroup(org.datanucleus.FetchGroup)
      */
     @Override
     public void addInternalFetchGroup(FetchGroup grp)
@@ -1475,7 +1479,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#removeInternalFetchGroup(org.datanucleus.FetchGroup)
+     * @see org.datanucleus.PersistenceNucleusContext#removeInternalFetchGroup(org.datanucleus.FetchGroup)
      */
     @Override
     public void removeInternalFetchGroup(FetchGroup grp)
@@ -1484,7 +1488,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#createInternalFetchGroup(java.lang.Class, java.lang.String)
+     * @see org.datanucleus.PersistenceNucleusContext#createInternalFetchGroup(java.lang.Class, java.lang.String)
      */
     @Override
     public FetchGroup createInternalFetchGroup(Class cls, String name)
@@ -1503,7 +1507,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getInternalFetchGroup(java.lang.Class, java.lang.String, boolean)
+     * @see org.datanucleus.PersistenceNucleusContext#getInternalFetchGroup(java.lang.Class, java.lang.String, boolean)
      */
     @Override
     public FetchGroup getInternalFetchGroup(Class cls, String name, boolean createIfNotPresent)
@@ -1525,7 +1529,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#getFetchGroupsWithName(java.lang.String)
+     * @see org.datanucleus.PersistenceNucleusContext#getFetchGroupsWithName(java.lang.String)
      */
     @Override
     public Set<FetchGroup> getFetchGroupsWithName(String name)
@@ -1573,7 +1577,7 @@ public class PersistenceNucleusContextImpl extends AbstractNucleusContext implem
     }
 
     /* (non-Javadoc)
-     * @see org.datanucleus.NucleusContext#isClassCacheable(org.datanucleus.metadata.AbstractClassMetaData)
+     * @see org.datanucleus.PersistenceNucleusContext#isClassCacheable(org.datanucleus.metadata.AbstractClassMetaData)
      */
     @Override
     public boolean isClassCacheable(AbstractClassMetaData cmd)

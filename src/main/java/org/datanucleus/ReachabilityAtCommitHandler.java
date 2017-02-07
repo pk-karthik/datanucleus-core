@@ -19,6 +19,7 @@ package org.datanucleus;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.datanucleus.exceptions.NucleusObjectNotFoundException;
 import org.datanucleus.state.ObjectProvider;
@@ -60,10 +61,10 @@ public class ReachabilityAtCommitHandler
     public ReachabilityAtCommitHandler(ExecutionContext ec)
     {
         this.ec = ec;
-        this.persistedIds = new HashSet();
-        this.deletedIds = new HashSet();
-        this.flushedNewIds = new HashSet();
-        this.enlistedIds = new HashSet();
+        this.persistedIds = ec.getMultithreaded() ? ConcurrentHashMap.newKeySet() : new HashSet();
+        this.deletedIds = ec.getMultithreaded() ? ConcurrentHashMap.newKeySet() : new HashSet();
+        this.flushedNewIds = ec.getMultithreaded() ? ConcurrentHashMap.newKeySet() : new HashSet();
+        this.enlistedIds = ec.getMultithreaded() ? ConcurrentHashMap.newKeySet() : new HashSet();
     }
 
     /**
@@ -120,26 +121,29 @@ public class ReachabilityAtCommitHandler
 
     /**
      * Method that will allow swapping of an "id", for example when an object has recently been assigned its true "id".
-     * @param oldID The old id that it is registered with
+     * @param oldID The old id that it is registered with. If this is null then we do nothing
      * @param newID The new id to use in place
      */
     public void swapObjectId(Object oldID, Object newID)
     {
-        if (enlistedIds.remove(oldID))
+        if (oldID != null)
         {
-            enlistedIds.add(newID);
-        }
-        if (flushedNewIds.remove(oldID))
-        {
-            flushedNewIds.add(newID);
-        }
-        if (persistedIds.remove(oldID))
-        {
-            persistedIds.add(newID);
-        }
-        if (deletedIds.remove(oldID))
-        {
-            deletedIds.add(newID);
+            if (enlistedIds.remove(oldID))
+            {
+                enlistedIds.add(newID);
+            }
+            if (flushedNewIds.remove(oldID))
+            {
+                flushedNewIds.add(newID);
+            }
+            if (persistedIds.remove(oldID))
+            {
+                persistedIds.add(newID);
+            }
+            if (deletedIds.remove(oldID))
+            {
+                deletedIds.add(newID);
+            }
         }
     }
 
@@ -191,7 +195,7 @@ public class ReachabilityAtCommitHandler
 
                                 // Go through all relation fields using ReachabilityFieldManager
                                 ReachabilityFieldManager pcFM = new ReachabilityFieldManager(op, currentReachables);
-                                int[] relationFieldNums = op.getClassMetaData().getRelationMemberPositions(ec.getClassLoaderResolver(), ec.getMetaDataManager());
+                                int[] relationFieldNums = op.getClassMetaData().getRelationMemberPositions(ec.getClassLoaderResolver());
                                 if (relationFieldNums != null && relationFieldNums.length > 0)
                                 {
                                     op.provideFields(relationFieldNums, pcFM);

@@ -31,10 +31,10 @@ import org.datanucleus.metadata.ColumnMetaData;
 import org.datanucleus.metadata.ContainerMetaData;
 import org.datanucleus.metadata.FieldPersistenceModifier;
 import org.datanucleus.metadata.MapMetaData;
-import org.datanucleus.metadata.MetaDataManager;
 import org.datanucleus.metadata.ValueMetaData;
 import org.datanucleus.store.types.ContainerHandler;
 import org.datanucleus.store.types.MapContainerAdapter;
+import org.datanucleus.store.types.TypeManager;
 import org.datanucleus.util.ClassUtils;
 import org.datanucleus.util.Localiser;
 import org.datanucleus.util.NucleusLogger;
@@ -48,7 +48,7 @@ public abstract class MapHandler<C> implements ContainerHandler<C, MapContainerA
     }
 
     @Override
-    public void populateMetaData(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr, AbstractMemberMetaData mmd)
+    public void populateMetaData(ClassLoaderResolver clr, ClassLoader primary, AbstractMemberMetaData mmd)
     {
         MapMetaData mapMd = assertValidType(mmd.getContainer());
 
@@ -67,13 +67,13 @@ public abstract class MapHandler<C> implements ContainerHandler<C, MapContainerA
         if (mmd.getKeyMetaData() != null)
         {
             // Populate any key object
-            mmd.getKeyMetaData().populate(clr, primary, mmgr);
+            mmd.getKeyMetaData().populate(clr, primary);
         }
         
         if (mmd.getValueMetaData() != null)
         {
             // Populate any value object
-            mmd.getValueMetaData().populate(clr, primary, mmgr);
+            mmd.getValueMetaData().populate(clr, primary);
         }
         
         if (mmd.getPersistenceModifier() == FieldPersistenceModifier.PERSISTENT)
@@ -99,7 +99,7 @@ public abstract class MapHandler<C> implements ContainerHandler<C, MapContainerA
                 }
             }
             
-            mapMd.populate(clr, primary, mmgr);
+            mapMd.populate(clr, primary);
         }
     }
 
@@ -269,7 +269,7 @@ public abstract class MapHandler<C> implements ContainerHandler<C, MapContainerA
     }
 
     @Override
-    public boolean isDefaultFetchGroup(ClassLoaderResolver clr, MetaDataManager mmgr, AbstractMemberMetaData mmd)
+    public boolean isDefaultFetchGroup(ClassLoaderResolver clr, TypeManager typeMgr, AbstractMemberMetaData mmd)
     {
         return false;
     }

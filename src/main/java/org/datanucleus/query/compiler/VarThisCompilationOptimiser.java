@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2010 Andy Jefferson and others. All rights reserved.
+Copyright (c) 2016 Andy Jefferson and others. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 Contributors:
-   ...
-**********************************************************************/
+     ...
+ **********************************************************************/
 package org.datanucleus.query.compiler;
 
 import java.util.ArrayList;
@@ -23,6 +23,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.datanucleus.ClassLoaderResolver;
+import org.datanucleus.metadata.MetaDataManager;
 import org.datanucleus.query.expression.DyadicExpression;
 import org.datanucleus.query.expression.Expression;
 import org.datanucleus.query.expression.InvokeExpression;
@@ -31,37 +33,36 @@ import org.datanucleus.query.expression.VariableExpression;
 import org.datanucleus.util.NucleusLogger;
 
 /**
- * Optimiser for a query compilation.
- * Attempts to detect and correct common input problems to give a more efficiently evaluated query.
- * Currently handles the following
- * <ul>
- * <li>When the user specifies "var == this", this means nothing since the variable is the same as the candidate
- * so replaces all instances of the variable with the candidate</li>
- * </ul>
+ * Optimiser for query compilation that searches for variable equality like "var == this".
+ * Since the variable is the same as the candidate it will replace all instances of the variable with the candidate.
+ * TODO We should only update "var == this" in the same branch of the filter (i.e not if used in other branches of the filter)
+ * Applies to the FILTER only.
  */
-public class QueryCompilerOptimiser
+public class VarThisCompilationOptimiser implements CompilationOptimiser
 {
     /** The compilation that we are optimising. */
     QueryCompilation compilation;
 
-    public QueryCompilerOptimiser(QueryCompilation compilation)
+    public VarThisCompilationOptimiser(QueryCompilation compilation, MetaDataManager unused, ClassLoaderResolver clr)
     {
         this.compilation = compilation;
     }
 
-    /**
-     * Method to perform the optimisation.
+    /* (non-Javadoc)
+     * @see org.datanucleus.query.compiler.CompilationOptimiser#optimise()
      */
+    @Override
     public void optimise()
     {
         if (compilation == null)
         {
             return;
         }
+
         if (compilation.getExprFilter() != null)
         {
             // Check for redundant variables in the filter, an expression of the form "var == this"
-            Set<String> redundantVariables = new HashSet<String>();
+            Set<String> redundantVariables = new HashSet<>();
             findRedundantFilterVariables(compilation.getExprFilter(), redundantVariables);
             if (!redundantVariables.isEmpty())
             {
@@ -71,8 +72,7 @@ public class QueryCompilerOptimiser
                     String var = redundantVarIter.next();
                     if (NucleusLogger.QUERY.isDebugEnabled())
                     {
-                        NucleusLogger.QUERY.debug("Query was defined with variable " + var + 
-                        " yet this was redundant, so has been replaced by the candidate");
+                        NucleusLogger.QUERY.debug("JDOQL Optimiser : Query was defined with variable " + var + " yet this was redundant, so has been replaced by the candidate");
                     }
 
                     compilation.setExprFilter(replaceVariableWithCandidateInExpression(var, compilation.getExprFilter()));

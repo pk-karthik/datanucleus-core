@@ -20,9 +20,8 @@ Contributors:
 package org.datanucleus.metadata;
 
 import java.io.Serializable;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.datanucleus.ClassLoaderResolver;
 import org.datanucleus.exceptions.NucleusException;
@@ -37,9 +36,9 @@ import org.datanucleus.exceptions.NucleusException;
  * <LI>MetaData object is initialised (any internal arrays are set up, and additions of data is blocked from this point).
  * <LI>MetaData object is added to with runtime information like actual column names and types in use.</LI> 
  * </OL>
- * <h3>MetaData Extensability</h3>
+ * <h3>MetaData Extensibility</h3>
  * <p>
- * All MetaData elements are extensible with extensions for a "vendor-name". Extensions take the form of a key and a value.
+ * All MetaData elements are extensible with extensions. We only store the DataNucleus vendor extensions here.
  */
 public class MetaData implements Serializable
 {
@@ -56,12 +55,6 @@ public class MetaData implements Serializable
 
     /** State reflecting that MetaData object has been modified with usage information (e.g defaulted column names). */
     public static final int METADATA_USED_STATE = 3;
-
-    /** State of the MetaData. */
-    protected int metaDataState = METADATA_CREATED_STATE;
-
-    /** Parent MetaData object, allowing hierarchical MetaData structure. */
-    protected MetaData parent;
 
     /** Vendor name (DataNucleus) used for extensions. */
     public static final String VENDOR_NAME = "datanucleus";
@@ -81,8 +74,17 @@ public class MetaData implements Serializable
     /** Class : when using multitenancy, defines the jdbc-type used for the mutitenancy discriminator column. */
     public static final String EXTENSION_CLASS_MULTITENANCY_JDBC_TYPE = "multitenancy-jdbc-type";
 
+    /** Class : when the class will use soft deletion (deletion flag column) rather than actually deleting objects. */
+    public static final String EXTENSION_CLASS_SOFTDELETE = "softdelete";
+
+    /** Class : when the class will use soft deletion, specifies the column name to use. */
+    public static final String EXTENSION_CLASS_SOFTDELETE_COLUMN_NAME = "softdelete-column-name";
+
     /** Class : define the name of a field that will store the version of this class. */
     public static final String EXTENSION_CLASS_VERSION_FIELD_NAME = "field-name";
+
+    /** Class : initial value to use for this class for versioning (when using version-number strategy). */
+    public static final String EXTENSION_VERSION_NUMBER_INITIAL_VALUE = "version-initial-value";
 
     /** Member : name of type converter to use. */
     public final static String EXTENSION_MEMBER_TYPE_CONVERTER_NAME = "type-converter-name";
@@ -149,8 +151,14 @@ public class MetaData implements Serializable
     /** Class : definition of imports for VIEW (when mapping to a view). */
     public static final String EXTENSION_CLASS_VIEW_IMPORTS = "view-imports";
 
-    /** List of extensions for this MetaData element. */
-    protected Collection<ExtensionMetaData> extensions = null;
+    /** State of the MetaData. */
+    protected int metaDataState = METADATA_CREATED_STATE;
+
+    /** Parent MetaData object, allowing hierarchical MetaData structure. */
+    protected MetaData parent;
+
+    /** Extensions for this MetaData element. */
+    protected Map<String, String> extensions = null;
 
     public MetaData()
     {
@@ -175,16 +183,19 @@ public class MetaData implements Serializable
         this.parent = parent;
         if (copy != null && copy.extensions != null)
         {
-            Iterator<ExtensionMetaData> extIter = copy.extensions.iterator();
-            while (extIter.hasNext())
+            if (extensions == null)
             {
-                ExtensionMetaData extmd = extIter.next();
-                addExtension(extmd.getVendorName(), extmd.getKey(), extmd.getValue());
+                extensions = new HashMap<>(copy.extensions);
+            }
+            else
+            {
+                extensions.clear();
+                extensions.putAll(copy.extensions);
             }
         }
     }
 
-    public void initialise(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public void initialise(ClassLoaderResolver clr)
     {
         setInitialised();
     }
@@ -204,90 +215,6 @@ public class MetaData implements Serializable
         metaDataState = METADATA_USED_STATE;
     }
 
-    public void setParent(MetaData md)
-    {
-        if (isPopulated() || isInitialised())
-        {
-            throw new NucleusException("Cannot set parent of " + this + " since it is already populated/initialised");
-        }
-        this.parent = md;
-    }
-
-    public MetaData addExtension(String vendor, String key, String value)
-    {
-        if (vendor == null || (vendor.equalsIgnoreCase(VENDOR_NAME) && (key == null || value == null)))
-        {
-            throw new InvalidMetaDataException("044160", vendor, key, value);
-        }
-
-        if (vendor.equalsIgnoreCase(VENDOR_NAME) && hasExtension(key))
-        {
-            // Remove any existing value
-            removeExtension(key);
-        }
-
-        if (extensions == null)
-        {
-            // First extensions so allocate the collection. We dont need ordering so use HashSet
-            extensions = new HashSet(2);
-        }
-        extensions.add(new ExtensionMetaData(vendor, key, value));
-        return this;
-    }
-
-    public MetaData addExtension(String key, String value)
-    {
-        return addExtension(VENDOR_NAME, key, value);
-    }
-
-    /**
-     * Method to create a new ExtensionMetaData, add it, and return it.
-     * @param vendor The vendor name
-     * @param key Key of the extension
-     * @param value Value
-     * @return The extension
-     */
-    public ExtensionMetaData newExtensionMetaData(String vendor, String key, String value)
-    {
-        if (vendor == null || (vendor.equalsIgnoreCase(VENDOR_NAME) && (key == null || value == null)))
-        {
-            throw new InvalidMetaDataException("044160", vendor, key, value);
-        }
-
-        ExtensionMetaData extmd = new ExtensionMetaData(vendor, key, value);
-        if (extensions == null)
-        {
-            extensions = new HashSet(2);
-        }
-        extensions.add(extmd);
-        return extmd;
-    }
-
-    public MetaData removeExtension(String key)
-    {
-        if (extensions == null)
-        {
-            return this;
-        }
-
-        Iterator iter = extensions.iterator();
-        while (iter.hasNext())
-        {
-            ExtensionMetaData ex = (ExtensionMetaData)iter.next();
-            if (ex.getKey().equals(key) && ex.getVendorName().equalsIgnoreCase(VENDOR_NAME))
-            {
-                iter.remove();
-                break;
-            }
-        }
-        return this;
-    }
-
-    public MetaData getParent()
-    {
-        return parent;
-    }
-
     public boolean isPopulated()
     {
         return metaDataState >= METADATA_POPULATED_STATE;
@@ -303,18 +230,99 @@ public class MetaData implements Serializable
         return metaDataState == METADATA_USED_STATE;
     }
 
+    public MetaDataManager getMetaDataManager()
+    {
+        return parent != null ? parent.getMetaDataManager() : null;
+    }
+
+    public void setParent(MetaData md)
+    {
+        if (isPopulated() || isInitialised())
+        {
+            throw new NucleusException("Cannot set parent of " + this + " since it is already populated/initialised");
+        }
+        this.parent = md;
+    }
+
+    public MetaData getParent()
+    {
+        return parent;
+    }
+
+    public MetaData addExtensions(Map<String, String> exts)
+    {
+        if (exts == null || exts.size() == 0)
+        {
+            return this;
+        }
+
+        if (extensions == null)
+        {
+            extensions = new HashMap<>(exts);
+        }
+        else
+        {
+            extensions.putAll(exts);
+        }
+        return this;
+    }
+
+    public MetaData setExtensions(Map<String, String> exts)
+    {
+        if (exts == null)
+        {
+            extensions = null;
+        }
+        else
+        {
+            extensions = new HashMap<>(exts);
+        }
+        return this;
+    }
+
+    public MetaData addExtension(String key, String value)
+    {
+        if (key == null || value == null)
+        {
+            throw new InvalidMetaDataException("044160", VENDOR_NAME, key, value);
+        }
+
+        if (hasExtension(key))
+        {
+            // Remove any existing value
+            removeExtension(key);
+        }
+
+        if (extensions == null)
+        {
+            extensions = new HashMap();
+        }
+        extensions.put(key, value);
+        return this;
+    }
+
+    public MetaData removeExtension(String key)
+    {
+        if (extensions == null)
+        {
+            return this;
+        }
+        extensions.remove(key);
+        return this;
+    }
+
     public int getNoOfExtensions()
     {
         return extensions != null ? extensions.size() : 0;
     }
 
-    public ExtensionMetaData[] getExtensions()
+    public Map<String, String> getExtensions()
     {
         if (extensions == null || extensions.isEmpty())
         {
             return null;
         }
-        return extensions.toArray(new ExtensionMetaData[extensions.size()]);
+        return extensions;
     }
 
     public boolean hasExtension(String key)
@@ -323,17 +331,7 @@ public class MetaData implements Serializable
         {
             return false;
         }
-
-        Iterator iter = extensions.iterator();
-        while (iter.hasNext())
-        {
-            ExtensionMetaData ex = (ExtensionMetaData)iter.next();
-            if (ex.getKey().equals(key) && ex.getVendorName().equalsIgnoreCase(VENDOR_NAME))
-            {
-                return true;
-            }
-        }
-        return false;
+        return extensions.containsKey(key);
     }
 
     /**
@@ -347,17 +345,7 @@ public class MetaData implements Serializable
         {
             return null;
         }
-
-        Iterator iter = extensions.iterator();
-        while (iter.hasNext())
-        {
-            ExtensionMetaData ex = (ExtensionMetaData)iter.next();
-            if (ex.getKey().equals(key) && ex.getVendorName().equalsIgnoreCase(VENDOR_NAME))
-            {
-                return ex.getValue();
-            }
-        }
-        return null;
+        return extensions.get(key);
     }
 
     /**
@@ -373,49 +361,11 @@ public class MetaData implements Serializable
             return null;
         }
 
-        Iterator iter = extensions.iterator();
-        while (iter.hasNext())
+        String value = extensions.get(key);
+        if (value != null)
         {
-            ExtensionMetaData ex = (ExtensionMetaData)iter.next();
-            if (ex.getKey().equals(key) && ex.getVendorName().equalsIgnoreCase(VENDOR_NAME))
-            {
-                return MetaDataUtils.getInstance().getValuesForCommaSeparatedAttribute(ex.getValue());
-            }
+            return MetaDataUtils.getInstance().getValuesForCommaSeparatedAttribute(value);
         }
         return null;
-    }
-
-    // -------------------------------- Utilities ------------------------------
- 
-    /**
-     * Accessor for a string representation of the object.
-     * @return a string representation of the object.
-     */
-    public String toString()
-    {
-        return toString("","");
-    }
-
-    /**
-     * Returns a string representation of the object.
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix, String indent)
-    {
-        if (extensions == null || extensions.isEmpty())
-        {
-            return "";
-        }
-
-        StringBuilder sb = new StringBuilder();
-        Iterator iter = extensions.iterator();
-        while (iter.hasNext())
-        {
-            ExtensionMetaData ex = (ExtensionMetaData)iter.next();
-            sb.append(prefix).append(ex.toString()).append("\n");
-        }
-        return sb.toString();
     }
 }

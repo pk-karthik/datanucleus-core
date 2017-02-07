@@ -33,16 +33,30 @@ public class JoinExpression extends Expression
 
     public enum JoinType
     {
-        JOIN_INNER, JOIN_LEFT_OUTER, JOIN_RIGHT_OUTER, JOIN_INNER_FETCH, JOIN_LEFT_OUTER_FETCH, JOIN_RIGHT_OUTER_FETCH
+        JOIN_INNER, 
+        JOIN_LEFT_OUTER, 
+        JOIN_RIGHT_OUTER, 
+        JOIN_INNER_FETCH, 
+        JOIN_LEFT_OUTER_FETCH, 
+        JOIN_RIGHT_OUTER_FETCH;
+
+        public static boolean isFetch(JoinType type)
+        {
+            if (type == JoinType.JOIN_INNER_FETCH || type == JoinType.JOIN_LEFT_OUTER_FETCH || type == JOIN_RIGHT_OUTER_FETCH)
+            {
+                return true;
+            }
+            return false;
+        }
     }
 
     JoinType type;
-    PrimaryExpression primExpr; // Expression for the field we are joining to
+    Expression joinedExpr; // Expression for the field we are joining to, can be PrimaryExpression, or DyadicExpression(CAST - for TREAT)
     Expression onExpr; // Optional ON expression to add to the join clause
 
-    public JoinExpression(PrimaryExpression expr, String alias, JoinType type)
+    public JoinExpression(Expression expr, String alias, JoinType type)
     {
-        this.primExpr = expr;
+        this.joinedExpr = expr;
         this.alias = alias;
         this.type = type;
     }
@@ -57,9 +71,9 @@ public class JoinExpression extends Expression
         this.onExpr = expr;
     }
 
-    public PrimaryExpression getPrimaryExpression()
+    public Expression getJoinedExpression()
     {
-        return primExpr;
+        return joinedExpr;
     }
 
     public Expression getOnExpression()
@@ -92,8 +106,8 @@ public class JoinExpression extends Expression
     {
         if (right != null)
         {
-            return "JoinExpression{" + type + " " + primExpr + " alias=" + alias + " join=" + right + (onExpr != null ? (" on=" + onExpr) : "") + "}";
+            return "JoinExpression{" + type + " " + joinedExpr + " alias=" + alias + " join=" + right + (onExpr != null ? (" on=" + onExpr) : "") + "}";
         }
-        return "JoinExpression{" + type + " " + primExpr + " alias=" + alias + (onExpr != null ? (" on=" + onExpr) : "") + "}";
+        return "JoinExpression{" + type + " " + joinedExpr + " alias=" + alias + (onExpr != null ? (" on=" + onExpr) : "") + "}";
     }
 }

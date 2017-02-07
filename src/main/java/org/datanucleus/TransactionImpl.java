@@ -37,21 +37,21 @@ import org.datanucleus.transaction.HeuristicMixedException;
 import org.datanucleus.transaction.HeuristicRollbackException;
 import org.datanucleus.transaction.NucleusTransactionException;
 import org.datanucleus.transaction.RollbackException;
-import org.datanucleus.transaction.TransactionManager;
+import org.datanucleus.transaction.ResourcedTransactionManager;
 import org.datanucleus.transaction.TransactionUtils;
 import org.datanucleus.util.Localiser;
 import org.datanucleus.util.NucleusLogger;
 import org.datanucleus.util.StringUtils;
 
 /**
- * Implementation of a transaction for a datastore. See {@link org.datanucleus.Transaction}.
+ * Implementation of a transaction for an ExecutionContext, for a datastore. See {@link org.datanucleus.Transaction}.
  * This is not thread-safe.
  */
 public class TransactionImpl implements Transaction
 {
     ExecutionContext ec;
 
-    TransactionManager txnMgr;
+    ResourcedTransactionManager txnMgr;
 
     /** Whether the transaction is active. */
     boolean active = false;
@@ -80,7 +80,7 @@ public class TransactionImpl implements Transaction
     private Map<String, Object> options = null;
 
     /** start time of the transaction */
-    long beginTime;
+    long beginTime = -1;
 
     boolean closed = false;
     
@@ -95,7 +95,7 @@ public class TransactionImpl implements Transaction
     {
         this.ec = ec;
         this.ecListener = (TransactionEventListener) ec;
-        this.txnMgr = ec.getNucleusContext().getTransactionManager();
+        this.txnMgr = ec.getNucleusContext().getResourcedTransactionManager();
         this.properties = properties;
         
         Configuration config = ec.getNucleusContext().getConfiguration();
@@ -122,8 +122,19 @@ public class TransactionImpl implements Transaction
         }
     }
 
+    public long getBeginTime()
+    {
+        return beginTime;
+    }
+
     public void close()
     {
+        userListeners = null;
+        listenersPerTransaction = null;
+        options = null;
+        txnMgr = null;
+        ec = null;
+
         closed = true;
     }
 
@@ -513,7 +524,7 @@ public class TransactionImpl implements Transaction
      */
     protected void internalRollback()
     {
-        org.datanucleus.transaction.Transaction tx = txnMgr.getTransaction(ec);
+        org.datanucleus.transaction.ResourcedTransaction tx = txnMgr.getTransaction(ec);
         if (tx != null)
         {
             if (ec.getMultithreaded())
@@ -544,6 +555,7 @@ public class TransactionImpl implements Transaction
     {
         try
         {
+            beginTime = -1;
             active = false;
             if (ec.getStatistics() != null)
             {
@@ -617,7 +629,7 @@ public class TransactionImpl implements Transaction
      */
     public boolean getNontransactionalRead()
     {
-        return ec.getBooleanProperty(PropertyNames.PROPERTY_NONTX_READ);
+        return ec.getBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_READ);
     }
 
     /**
@@ -626,7 +638,7 @@ public class TransactionImpl implements Transaction
      */
     public boolean getNontransactionalWrite()
     {
-        return ec.getBooleanProperty(PropertyNames.PROPERTY_NONTX_WRITE);
+        return ec.getBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_WRITE);
     }
 
     /**
@@ -635,7 +647,7 @@ public class TransactionImpl implements Transaction
      */
     public boolean getNontransactionalWriteAutoCommit()
     {
-        return ec.getBooleanProperty(PropertyNames.PROPERTY_NONTX_ATOMIC);
+        return ec.getBooleanProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_ATOMIC);
     }
 
     /**
@@ -693,7 +705,7 @@ public class TransactionImpl implements Transaction
      */
     public void setNontransactionalRead(boolean nontransactionalRead)
     {
-        ec.setProperty(PropertyNames.PROPERTY_NONTX_READ, nontransactionalRead);
+        ec.setProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_READ, nontransactionalRead);
     }
 
     /**
@@ -702,7 +714,7 @@ public class TransactionImpl implements Transaction
      */
     public void setNontransactionalWrite(boolean nontransactionalWrite)
     {
-        ec.setProperty(PropertyNames.PROPERTY_NONTX_WRITE, nontransactionalWrite);
+        ec.setProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_WRITE, nontransactionalWrite);
     }
 
     /**
@@ -711,7 +723,7 @@ public class TransactionImpl implements Transaction
      */
     public void setNontransactionalWriteAutoCommit(boolean autoCommit)
     {
-        ec.setProperty(PropertyNames.PROPERTY_NONTX_ATOMIC, autoCommit);
+        ec.setProperty(PropertyNames.PROPERTY_TRANSACTION_NONTX_ATOMIC, autoCommit);
     }
 
     /**

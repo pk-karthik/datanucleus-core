@@ -83,6 +83,9 @@ public interface StoreManager
     public static final String OPTION_ORM_SERIALISED_ARRAY_ELEMENT = "ORM.SerialisedArrayElement";
     public static final String OPTION_ORM_SECONDARY_TABLE = "ORM.SecondaryTable";
     public static final String OPTION_ORM_FOREIGN_KEYS = "ORM.ForeignKeys";
+    public static final String OPTION_ORM_INHERITANCE_COMPLETE_TABLE = "ORM.Inheritance.CompleteTable";
+    public static final String OPTION_ORM_INHERITANCE_SINGLE_TABLE = "ORM.Inheritance.SingleTable";
+    public static final String OPTION_ORM_INHERITANCE_JOINED_TABLE = "ORM.Inheritance.JoinedTable";
 
     public static final String OPTION_TXN_ISOLATION_READ_COMMITTED = "TransactionIsolationLevel.read-committed";
     public static final String OPTION_TXN_ISOLATION_READ_UNCOMMITTED = "TransactionIsolationLevel.read-uncommitted";
@@ -99,6 +102,8 @@ public interface StoreManager
     public static final String OPTION_DATASTORE_TIMEOUT = "Datastore.Timeout";
     public static final String OPTION_DATASTORE_TIME_STORES_MILLISECS = "Datastore.Time.Millisecs";
     public static final String OPTION_DATASTORE_TIME_STORES_NANOSECS = "Datastore.Time.Nanosecs";
+
+    public static final String RELATION_IDENTITY_STORAGE_PERSISTABLE_IDENTITY = "PersistableIdentity";
 
     /**
      * Strings representing features that are supported by this datastore.

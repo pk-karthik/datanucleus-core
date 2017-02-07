@@ -29,7 +29,7 @@ public interface StoreSchemaHandler
 {
     StoreManager getStoreManager();
 
-    boolean isAutoCreateSchema();
+    boolean isAutoCreateDatabase();
     boolean isAutoCreateTables();
     boolean isAutoCreateConstraints();
     boolean isAutoCreateColumns();
@@ -46,23 +46,26 @@ public interface StoreSchemaHandler
     void clear();
 
     /**
-     * Method to create the specified schema.
+     * Method to create the specified database (catalog/schema).
+     * @param catalogName Name of the catalog
      * @param schemaName Name of the schema
      * @param props Any properties controlling the schema generation
      * @param connection Connection to use (null implies this will obtain its own connection)
      */
-    void createSchema(String schemaName, Properties props, Object connection);
+    void createDatabase(String catalogName, String schemaName, Properties props, Object connection);
 
     /**
-     * Method to delete the specified schema.
+     * Method to delete the specified database (catalog/schema).
+     * @param catalogName Name of the catalog
      * @param schemaName Name of the schema
      * @param props Any properties controlling the schema deletion
      * @param connection Connection to use (null implies this will obtain its own connection)
      */
-    void deleteSchema(String schemaName, Properties props, Object connection);
+    void deleteDatabase(String catalogName, String schemaName, Properties props, Object connection);
 
     /**
      * Method to generate the required schema for the supplied classes.
+     * Note that this does not generate a "schema", just the tables. Refer to createDatabase to create a "schema".
      * @param classNames Names of the classes we want the schema generating for.
      * @param props Any properties controlling the schema generation
      * @param connection Connection to use (null implies this will obtain its own connection)
@@ -71,6 +74,7 @@ public interface StoreSchemaHandler
 
     /**
      * Method to delete the schema for the supplied classes.
+     * Note that this does not delete a "schema", just the tables. Refer to deleteDatabase to delete a "schema".
      * @param classNames Names of the classes we want the schema deleting for.
      * @param props Any properties controlling the schema deletion
      * @param connection Connection to use (null implies this will obtain its own connection)

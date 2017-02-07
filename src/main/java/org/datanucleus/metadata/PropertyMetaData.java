@@ -18,8 +18,6 @@ Contributors:
 **********************************************************************/
 package org.datanucleus.metadata;
 
-import org.datanucleus.util.StringUtils;
-
 /**
  * The property element declares mapping between a virtual field of an implemented 
  * interface and the corresponding persistent field of a persistence-capable class. 
@@ -32,6 +30,7 @@ import org.datanucleus.util.StringUtils;
 public class PropertyMetaData extends AbstractMemberMetaData
 {
     private static final long serialVersionUID = -1281091318359894652L;
+
     /** Name of the field that this property is wrapping (when part of a persistent class). */
     protected String fieldName;
 
@@ -82,182 +81,35 @@ public class PropertyMetaData extends AbstractMemberMetaData
         return this;
     }
 
-    /**
-     * Returns a string representation of the object using a prefix
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
+    public String toString()
     {
-        // If this field is static, don't bother with MetaData since JDO will ignore it anyway.
-        if (isStatic())
+        StringBuilder str = new StringBuilder(super.toString()).append(" [").append(this.getFullFieldName()).append("]");
+        str.append(" type=").append(getTypeName());
+        if (primaryKey == Boolean.TRUE)
         {
-            return "";
+            str.append(", primary-key");
         }
-
-        // Field needs outputting so generate metadata
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<property name=\"" + name + "\"");
-        if (persistenceModifier != null && !StringUtils.isWhitespace(persistenceModifier.toString()))
+        if (embedded == Boolean.TRUE)
         {
-            sb.append("\n").append(prefix).append("       persistence-modifier=\"" + persistenceModifier + "\"");
+            str.append(", embedded");
         }
-        if (!StringUtils.isWhitespace(table))
+        if (serialized == Boolean.TRUE)
         {
-            sb.append("\n").append(prefix).append("       table=\"" + table + "\"");
+            str.append(", serialised");
         }
-        if (primaryKey != null && primaryKey.booleanValue())
-        {
-            sb.append("\n").append(prefix).append("       primary-key=\"" + primaryKey + "\"");
-        }
-        sb.append("\n").append(prefix).append("       null-value=\"" + nullValue + "\"");
-        if (defaultFetchGroup != null && !StringUtils.isWhitespace(defaultFetchGroup.toString()))
-        {
-            sb.append("\n").append(prefix).append("       default-fetch-group=\"" + defaultFetchGroup + "\"");
-        }
-        if (embedded != null && !StringUtils.isWhitespace(embedded.toString()))
-        {
-            sb.append("\n").append(prefix).append("       embedded=\"" + embedded + "\"");
-        }
-        if (serialized != null && !StringUtils.isWhitespace(serialized.toString()))
-        {
-            sb.append("\n").append(prefix).append("       serialized=\"" + serialized + "\"");
-        }
-        if (dependent != null)
-        {
-            sb.append("\n").append(prefix).append("       dependent=\"" + dependent + "\"");
-        }
-        if (mappedBy != null)
-        {
-            sb.append("\n").append(prefix).append("       mapped-by=\"" + mappedBy + "\"");
-        }
-        String[] fieldTypes = getFieldTypes();
-        if (fieldTypes != null)
-        {
-            sb.append("\n").append(prefix).append("       field-type=\"");
-            for (int i=0;i<fieldTypes.length;i++)
-            {
-                sb.append(fieldTypes[i]);
-            }
-            sb.append("\"");
-        }
-        if (!StringUtils.isWhitespace(loadFetchGroup))
-        {
-            sb.append("\n").append(prefix).append("       load-fetch-group=\"" + loadFetchGroup + "\"");
-        }
-        if (recursionDepth != DEFAULT_RECURSION_DEPTH && recursionDepth != UNDEFINED_RECURSION_DEPTH)
-        {
-            sb.append("\n").append(prefix).append("       recursion-depth=\"" + recursionDepth + "\"");
-        }
+        str.append(", persistence-modifier=").append(persistenceModifier.toString());
         if (valueStrategy != null)
         {
-            sb.append("\n").append(prefix).append("       value-strategy=\"" + valueStrategy + "\"");
+            str.append(", valueStrategy=").append(valueStrategy.toString());
         }
-        if (sequence != null)
+        if (parent instanceof AbstractClassMetaData)
         {
-            sb.append("\n").append(prefix).append("       sequence=\"" + sequence + "\"");
-        }
-        if (fieldName != null)
-        {
-            sb.append("\n").append(prefix).append("       field-name=\"" + fieldName + "\"");
-        }
-        if (table != null)
-        {
-            sb.append("\n").append(prefix).append("       table=\"" + table + "\"");
-        }
-        sb.append(">\n");
-
-        // Add field containers
-        if (containerMetaData != null)
-        {
-            if (containerMetaData instanceof CollectionMetaData)
+            AbstractClassMetaData parentAsCmd = (AbstractClassMetaData)parent;
+            if (!parentAsCmd.getFullClassName().equals(getClassName()))
             {
-                CollectionMetaData c = (CollectionMetaData)containerMetaData;
-                sb.append(c.toString(prefix + indent,indent));
-            }
-            else if (containerMetaData instanceof ArrayMetaData)
-            {
-                ArrayMetaData c = (ArrayMetaData)containerMetaData;
-                sb.append(c.toString(prefix + indent,indent));
-            }
-            else if (containerMetaData instanceof MapMetaData)
-            {
-                MapMetaData c = (MapMetaData)containerMetaData;
-                sb.append(c.toString(prefix + indent,indent));
+                str.append(" OVERRIDE");
             }
         }
-
-        // Add columns
-        if (columnMetaData != null)
-        {
-            for (int i=0; i<columnMetaData.length; i++)
-            {
-                sb.append(columnMetaData[i].toString(prefix + indent,indent));
-            }
-        }
-
-        // Add join
-        if (joinMetaData != null)
-        {
-            sb.append(joinMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add element
-        if (elementMetaData != null)
-        {
-            sb.append(elementMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add key
-        if (keyMetaData != null)
-        {
-            sb.append(keyMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add value
-        if (valueMetaData != null)
-        {
-            sb.append(valueMetaData.toString(prefix + indent,indent));
-        }
-
-        // TODO Add fetch-groups
-
-        // Add order
-        if (orderMetaData != null)
-        {
-            sb.append(orderMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add embedded
-        if (embeddedMetaData != null)
-        {
-            sb.append(embeddedMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add index
-        if (indexMetaData != null)
-        {
-            sb.append(indexMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add unique
-        if (uniqueMetaData != null)
-        {
-            sb.append(uniqueMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add foreign-key
-        if (foreignKeyMetaData != null)
-        {
-            sb.append(foreignKeyMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</property>\n");
-        return sb.toString();
+        return str.toString();
     }
 }

@@ -147,9 +147,10 @@ public class ExpressionCompiler
                     {
                         joinTypeId = JoinType.JOIN_RIGHT_OUTER;
                     }
+
                     Node joinedNode = childNode.getFirstChild();
                     Node joinedAliasNode = childNode.getNextChild();
-                    PrimaryExpression primExpr = (PrimaryExpression)compilePrimaryExpression(joinedNode);
+                    Expression joinedExpr = compilePrimaryExpression(joinedNode);
 
                     Expression onExpr = null;
                     if (childNode.hasNextChild())
@@ -158,7 +159,7 @@ public class ExpressionCompiler
                         onExpr = compileExpression(onNode);
                     }
 
-                    JoinExpression joinExpr = new JoinExpression(primExpr, (String)joinedAliasNode.getNodeValue(), joinTypeId);
+                    JoinExpression joinExpr = new JoinExpression(joinedExpr, (String)joinedAliasNode.getNodeValue(), joinTypeId);
                     if (currentJoinExpr != null)
                     {
                         currentJoinExpr.setJoinExpression(joinExpr);
@@ -276,9 +277,30 @@ public class ExpressionCompiler
         }
         else if (isOperator(node, "instanceof"))
         {
-            Expression left = compileExpression(node.getFirstChild());
-            Expression right = compileExpression(node.getNextChild());
-            return new DyadicExpression(left,Expression.OP_IS,right);
+            List<Node> childNodes = node.getChildNodes();
+            Iterator<Node> childNodeIter = childNodes.iterator();
+            Expression left = compileExpression(childNodeIter.next());
+            Expression right = null;
+            if (childNodes.size() == 2)
+            {
+                right = compileExpression(childNodeIter.next());
+            }
+            else
+            {
+                // Special case of "p instanceof (a,b,c)" meaning p is ONE of (a OR b OR c)
+                List<String> collValues = new ArrayList<>();
+                while (childNodeIter.hasNext())
+                {
+                    Node valueNode = childNodeIter.next();
+                    if (valueNode.getNodeType() == NodeType.IDENTIFIER)
+                    {
+                        String value = (String)valueNode.getNodeValue();
+                        collValues.add(value);
+                    }
+                }
+                right = new Literal(collValues);
+            }
+            return new DyadicExpression(left, Expression.OP_IS, right);
         }
         else if (isOperator(node, "IN"))
         {
@@ -806,7 +828,7 @@ public class ExpressionCompiler
         }
         else
         {
-            NucleusLogger.QUERY.warn("ExpressionCompiler.compilePrimary " + node + " ignored by ExpressionCompiler");
+            NucleusLogger.QUERY.warn("ExpressionCompiler.compilePrimaryExpression node=" + node + " ignored by ExpressionCompiler since not of a supported type");
         }
         return null;
     }

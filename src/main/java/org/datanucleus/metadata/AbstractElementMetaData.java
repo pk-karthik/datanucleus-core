@@ -55,7 +55,7 @@ public abstract class AbstractElementMetaData extends MetaData implements Column
     /** ForeignKeyMetaData */
     protected ForeignKeyMetaData foreignKeyMetaData;
 
-    /** EmbeddedMetaData */
+    /** Definition of embedding of the element/key/value. Only present if defined by user. */
     protected EmbeddedMetaData embeddedMetaData;
 
     protected String table;
@@ -113,13 +113,12 @@ public abstract class AbstractElementMetaData extends MetaData implements Column
      * Populate the metadata.
      * @param clr the ClassLoaderResolver
      * @param primary the primary ClassLoader to use (or null)
-     * @param mmgr MetaData manager
      */
-    public void populate(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr)
+    public void populate(ClassLoaderResolver clr, ClassLoader primary)
     {
         if (embeddedMetaData != null)
         {
-            embeddedMetaData.populate(clr, primary, mmgr);
+            embeddedMetaData.populate(clr, primary);
         }
     }
 
@@ -127,7 +126,7 @@ public abstract class AbstractElementMetaData extends MetaData implements Column
      * Method to initialise the object, creating any convenience arrays needed.
      * Initialises all sub-objects. 
      */
-    public void initialise(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public void initialise(ClassLoaderResolver clr)
     {
         // Cater for user specifying column name, or columns
         if (columns == null && columnName != null)
@@ -167,7 +166,7 @@ public abstract class AbstractElementMetaData extends MetaData implements Column
 
         if (embeddedMetaData != null)
         {
-            embeddedMetaData.initialise(clr, mmgr);
+            embeddedMetaData.initialise(clr);
         }
 
         setInitialised();

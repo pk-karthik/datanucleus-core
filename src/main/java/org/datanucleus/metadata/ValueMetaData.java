@@ -23,7 +23,6 @@ package org.datanucleus.metadata;
 import org.datanucleus.ClassLoaderResolver;
 import org.datanucleus.exceptions.ClassNotResolvedException;
 import org.datanucleus.exceptions.NucleusFatalUserException;
-import org.datanucleus.util.StringUtils;
 
 /**
  * This element specifies the mapping for the value component of maps.
@@ -53,20 +52,29 @@ public class ValueMetaData extends AbstractElementMetaData
      * Populate the MetaData.
      * @param clr Class loader to use
      * @param primary the primary ClassLoader to use (or null)
-     * @param mmgr MetaData manager
      */
-    public void populate(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr)
+    public void populate(ClassLoaderResolver clr, ClassLoader primary)
     {
-        AbstractMemberMetaData fmd = (AbstractMemberMetaData)parent;
-        if (fmd.getMap() == null)
+        AbstractMemberMetaData mmd = (AbstractMemberMetaData)parent;
+        if (mmd.getMap() == null)
         {
             // TODO Change this to InvalidMetaDataException
-            throw new NucleusFatalUserException("The field "+fmd.getFullFieldName()+" is defined with <value>, however no <map> definition was found.");
+            throw new NucleusFatalUserException("The field "+mmd.getFullFieldName()+" is defined with <value>, however no <map> definition was found.");
         }
 
+        // Populate the value metadata
+        if (hasExtension(MetaData.EXTENSION_MEMBER_TYPE_CONVERTER_NAME))
+        {
+            if (mmd.getMap().value.embedded == null)
+            {
+                // Default to embedded since the converter process requires it
+                mmd.getMap().value.embedded = Boolean.TRUE;
+            }
+        }
+        mmd.getMap().value.populate(mmd.getAbstractClassMetaData().getPackageName(), clr, primary);
+
         // Make sure value type is set and is valid
-        fmd.getMap().value.populate(fmd.getAbstractClassMetaData().getPackageName(), clr, primary, mmgr);
-        String valueType = fmd.getMap().getValueType();
+        String valueType = mmd.getMap().getValueType();
         Class valueTypeClass = null;
         try
         {
@@ -74,23 +82,21 @@ public class ValueMetaData extends AbstractElementMetaData
         }
         catch (ClassNotResolvedException cnre)
         {
-            throw new InvalidMemberMetaDataException("044150", fmd.getClassName(), fmd.getName(), 
-                valueType);
+            throw new InvalidMemberMetaDataException("044150", mmd.getClassName(), mmd.getName(), valueType);
         }
         if (embeddedMetaData != null &&
             (valueTypeClass.isInterface() || valueTypeClass.getName().equals("java.lang.Object")))
         {
-            throw new InvalidMemberMetaDataException("044152", fmd.getClassName(), fmd.getName(), valueTypeClass.getName());
+            throw new InvalidMemberMetaDataException("044152", mmd.getClassName(), mmd.getName(), valueTypeClass.getName());
         }
 
+        // TODO Remove this since we should only have <embedded> when the user defines it
         // TODO This will not work currently since MapMetaData is populated *after* ValueMetaData and so the
         // valueClassMetaData is not yet populated. What we should do is provide a postPopulate() method here
         // that MapMetaData can call when it is populated
         if (embeddedMetaData == null && 
-            ((AbstractMemberMetaData)parent).hasMap() && 
-            ((AbstractMemberMetaData)parent).getMap().isEmbeddedValue() &&
-            ((AbstractMemberMetaData)parent).getJoinMetaData() != null &&
-            ((AbstractMemberMetaData)parent).getMap().valueIsPersistent())
+            mmd.hasMap() && mmd.getMap().isEmbeddedValue() &&
+            mmd.getJoinMetaData() != null && mmd.getMap().valueIsPersistent())
         {
             // User has specified that the value is embedded in a join table but not how we embed it
             // so add a dummy definition
@@ -98,74 +104,6 @@ public class ValueMetaData extends AbstractElementMetaData
             embeddedMetaData.parent = this;
         }
 
-        super.populate(clr, primary, mmgr);
-    }
-
-    // ------------------------------- Utilities -------------------------------
-
-    /**
-     * Returns a string representation of the object using a prefix
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix, String indent)
-    {
-        // Field needs outputting so generate metadata
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<value");
-        if (mappedBy != null)
-        {
-            sb.append(" mapped-by=\"" + mappedBy + "\"");
-        }
-        if (!StringUtils.isWhitespace(table))
-        {
-            sb.append(" table=\"" + table + "\"");
-        }
-        if (!StringUtils.isWhitespace(columnName))
-        {
-            sb.append(" column=\"" + columnName + "\"");
-        }
-        sb.append(">\n");
-
-        // Add columns
-        if (columns != null)
-        {
-            for (ColumnMetaData colmd : columns)
-            {
-                sb.append(colmd.toString(prefix + indent,indent));
-            }
-        }
-
-        // Add index metadata
-        if (indexMetaData != null)
-        {
-            sb.append(indexMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add unique metadata
-        if (uniqueMetaData != null)
-        {
-            sb.append(uniqueMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add embedded metadata
-        if (embeddedMetaData != null)
-        {
-            sb.append(embeddedMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add foreign-key metadata
-        if (foreignKeyMetaData != null)
-        {
-            sb.append(foreignKeyMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</value>\n");
-        return sb.toString();
+        super.populate(clr, primary);
     }
 }

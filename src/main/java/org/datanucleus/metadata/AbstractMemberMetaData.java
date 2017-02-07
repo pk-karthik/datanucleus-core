@@ -67,7 +67,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
     /** Meta-Data of any container. */
     protected ContainerMetaData containerMetaData;
 
-    /** EmbeddedMetaData. */
+    /** Definition of embedding. Only present if defined by user. */
     protected EmbeddedMetaData embeddedMetaData;
 
     /** JoinMetaData. */
@@ -558,7 +558,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
                 setContainer(containerHandler.newMetaData());
             }
 
-            containerHandler.populateMetaData(clr, primary, mmgr, this);
+            containerHandler.populateMetaData(clr, primary, this);
         }
 
         // Update "default-fetch-group" according to type
@@ -577,7 +577,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             {
                 if (hasContainer())
                 {
-                    defaultFetchGroup = containerHandler.isDefaultFetchGroup(clr, mmgr, this);
+                    defaultFetchGroup = containerHandler.isDefaultFetchGroup(clr, typeMgr, this);
                 }
                 else if (typeMgr.isDefaultFetchGroup(getType()))
                 {
@@ -652,7 +652,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
 
         if (embedded == Boolean.TRUE && embeddedMetaData == null)
         {
-            // User specified "embedded" on the member, yet no embedded definition so add one
+            // User specified "embedded" on the member, yet no embedded definition so add one TODO Omit this, since we should only use when provided
             AbstractClassMetaData memberCmd = mmgr.getMetaDataForClassInternal(getType(), clr);
             if (memberCmd != null)
             {
@@ -660,7 +660,6 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
                 embeddedMetaData.setParent(this);
             }
         }
-        
         if (embeddedMetaData != null)
         {
             // Update with any extensions (for lack of features in JPA)
@@ -674,7 +673,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             }
 
             // Populate any embedded object
-            embeddedMetaData.populate(clr, primary, mmgr);
+            embeddedMetaData.populate(clr, primary);
             embedded = Boolean.TRUE;
         }
 
@@ -763,7 +762,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
                     }
                 }
             }
-            addExtension(VENDOR_NAME, "implementation-classes", str.toString()); // Replace with this new value
+            addExtension("implementation-classes", str.toString()); // Replace with this new value
         }
 
         // Set up persistence flags for enhancement process
@@ -877,17 +876,19 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
     }
 
     /**
-     * Initialisation method. This should be called AFTER using the populate
-     * method if you are going to use populate. It creates the internal
-     * convenience arrays etc needed for normal operation.
+     * Initialisation method.
+     * This should be called AFTER using the populate method if you are going to use populate.
+     * It creates the internal convenience arrays etc needed for normal operation.
      */
-    public synchronized void initialise(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public synchronized void initialise(ClassLoaderResolver clr)
     {
         if (persistenceModifier == FieldPersistenceModifier.NONE)
         {
             setInitialised();
             return;
         }
+
+//        MetaDataManager mmgr = getMetaDataManager();
 
         // Cater for user specifying column name, or columns
         if (columns.isEmpty() && column != null)
@@ -896,7 +897,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             columnMetaData[0] = new ColumnMetaData();
             columnMetaData[0].setName(column);
             columnMetaData[0].parent = this;
-            columnMetaData[0].initialise(clr, mmgr);
+            columnMetaData[0].initialise(clr);
         }
         else if (columns.size() == 1 && column != null)
         {
@@ -907,7 +908,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             {
                 columnMetaData[0].setName(column);
             }
-            columnMetaData[0].initialise(clr, mmgr);
+            columnMetaData[0].initialise(clr);
         }
         else
         {
@@ -915,72 +916,120 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             for (int i=0; i<columnMetaData.length; i++)
             {
                 columnMetaData[i] = columns.get(i);
-                columnMetaData[i].initialise(clr, mmgr);
+                columnMetaData[i].initialise(clr);
             }
         }
         // Initialise all sub-objects
         if (containerMetaData != null)
         {
-            containerMetaData.initialise(clr, mmgr);
+            containerMetaData.initialise(clr);
             if (containerMetaData instanceof CollectionMetaData)
             {
                 CollectionMetaData collmd = (CollectionMetaData)containerMetaData;
-                if (collmd.element.classMetaData != null && collmd.element.classMetaData.isEmbeddedOnly())
+                if (collmd.element.classMetaData != null)
                 {
-                    // Element is persistent yet embedded only so mark as embedded in metadata
-                    if (elementMetaData == null)
+                    if (collmd.element.classMetaData.isEmbeddedOnly())
                     {
-                        elementMetaData = new ElementMetaData();
-                        elementMetaData.parent = this;
-                        elementMetaData.populate(clr, null, mmgr);
+                        // Element is persistent yet embedded only so mark as embedded in metadata
+                        if (elementMetaData == null)
+                        {
+                            elementMetaData = new ElementMetaData();
+                            elementMetaData.parent = this;
+                            elementMetaData.populate(clr, null);
+                        }
+/*                        if (elementMetaData.getEmbeddedMetaData() == null)
+                        {
+                            EmbeddedMetaData elemEmbmd = new EmbeddedMetaData();
+                            elemEmbmd.parent = elementMetaData;
+                            elemEmbmd.populate(clr, null, mmgr);
+                            elementMetaData.setEmbeddedMetaData(elemEmbmd);
+                        }*/
+                        collmd.setEmbeddedElement(true);
                     }
-                    if (elementMetaData.getEmbeddedMetaData() == null)
+                    if (embedded == Boolean.TRUE)
                     {
-                        EmbeddedMetaData elemEmbmd = new EmbeddedMetaData();
-                        elemEmbmd.parent = elementMetaData;
-                        elemEmbmd.populate(clr, null, mmgr);
-                        elementMetaData.setEmbeddedMetaData(elemEmbmd);
-                        collmd.element.embedded = Boolean.TRUE;
+                        // User has set field as embedded, so assume they mean the element
+                        collmd.setEmbeddedElement(true);
+                        this.embedded = null;
+                        this.embeddedMetaData = null;
+                    }
+                }
+            }
+            else if (containerMetaData instanceof ArrayMetaData)
+            {
+                ArrayMetaData arrmd = (ArrayMetaData)containerMetaData;
+                if (arrmd.element.classMetaData != null)
+                {
+                    if (arrmd.element.classMetaData.isEmbeddedOnly())
+                    {
+                        // Element is persistent yet embedded only so mark as embedded in metadata
+                        if (elementMetaData == null)
+                        {
+                            elementMetaData = new ElementMetaData();
+                            elementMetaData.parent = this;
+                            elementMetaData.populate(clr, null);
+                        }
+/*                        if (elementMetaData.getEmbeddedMetaData() == null)
+                        {
+                            EmbeddedMetaData elemEmbmd = new EmbeddedMetaData();
+                            elemEmbmd.parent = elementMetaData;
+                            elemEmbmd.populate(clr, null, mmgr);
+                            elementMetaData.setEmbeddedMetaData(elemEmbmd);
+                        }*/
+                        arrmd.setEmbeddedElement(true);
+                    }
+                    if (embedded == Boolean.TRUE)
+                    {
+                        // User has set field as embedded, so assume they mean the element
+                        arrmd.setEmbeddedElement(true);
+                        this.embedded = null;
+                        this.embeddedMetaData = null;
                     }
                 }
             }
             else if (containerMetaData instanceof MapMetaData)
             {
                 MapMetaData mapmd = (MapMetaData)containerMetaData;
-                if (mapmd.key.classMetaData != null && mapmd.key.classMetaData.isEmbeddedOnly())
+                if (mapmd.key.classMetaData != null)
                 {
-                    // Key is persistent yet embedded only so mark as embedded in metadata
-                    if (keyMetaData == null)
+                    if (mapmd.key.classMetaData.isEmbeddedOnly())
                     {
-                        keyMetaData = new KeyMetaData();
-                        keyMetaData.parent = this;
-                        keyMetaData.populate(clr, null, mmgr);
-                    }
-                    if (keyMetaData.getEmbeddedMetaData() == null)
-                    {
-                        EmbeddedMetaData keyEmbmd = new EmbeddedMetaData();
-                        keyEmbmd.parent = keyMetaData;
-                        keyEmbmd.populate(clr, null, mmgr);
-                        keyMetaData.setEmbeddedMetaData(keyEmbmd);
-                        mapmd.key.embedded = Boolean.TRUE;
+                        // Key is persistent yet embedded only so mark as embedded in metadata
+                        if (keyMetaData == null)
+                        {
+                            keyMetaData = new KeyMetaData();
+                            keyMetaData.parent = this;
+                            keyMetaData.populate(clr, null);
+                        }
+/*                        if (keyMetaData.getEmbeddedMetaData() == null)
+                        {
+                            EmbeddedMetaData keyEmbmd = new EmbeddedMetaData();
+                            keyEmbmd.parent = keyMetaData;
+                            keyEmbmd.populate(clr, null, mmgr);
+                            keyMetaData.setEmbeddedMetaData(keyEmbmd);
+                        }*/
+                        mapmd.setEmbeddedKey(true);
                     }
                 }
-                if (mapmd.value.classMetaData != null && mapmd.value.classMetaData.isEmbeddedOnly())
+                if (mapmd.value.classMetaData != null)
                 {
-                    // Value is persistent yet embedded only so mark as embedded in metadata
-                    if (valueMetaData == null)
+                    if (mapmd.value.classMetaData.isEmbeddedOnly())
                     {
-                        valueMetaData = new ValueMetaData();
-                        valueMetaData.parent = this;
-                        valueMetaData.populate(clr, null, mmgr);
-                    }
-                    if (valueMetaData.getEmbeddedMetaData() == null)
-                    {
-                        EmbeddedMetaData valueEmbmd = new EmbeddedMetaData();
-                        valueEmbmd.parent = valueMetaData;
-                        valueEmbmd.populate(clr, null, mmgr);
-                        valueMetaData.setEmbeddedMetaData(valueEmbmd);
-                        mapmd.value.embedded = Boolean.TRUE;
+                        // Value is persistent yet embedded only so mark as embedded in metadata
+                        if (valueMetaData == null)
+                        {
+                            valueMetaData = new ValueMetaData();
+                            valueMetaData.parent = this;
+                            valueMetaData.populate(clr, null);
+                        }
+/*                        if (valueMetaData.getEmbeddedMetaData() == null)
+                        {
+                            EmbeddedMetaData valueEmbmd = new EmbeddedMetaData();
+                            valueEmbmd.parent = valueMetaData;
+                            valueEmbmd.populate(clr, null, mmgr);
+                            valueMetaData.setEmbeddedMetaData(valueEmbmd);
+                        }*/
+                        mapmd.setEmbeddedValue(true);
                     }
                 }
             }
@@ -988,23 +1037,23 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
 
         if (embeddedMetaData != null)
         {
-            embeddedMetaData.initialise(clr, mmgr);
+            embeddedMetaData.initialise(clr);
         }
         if (joinMetaData != null)
         {
-            joinMetaData.initialise(clr, mmgr);
+            joinMetaData.initialise(clr);
         }
         if (elementMetaData != null)
         {
-            elementMetaData.initialise(clr, mmgr);
+            elementMetaData.initialise(clr);
         }
         if (keyMetaData != null)
         {
-            keyMetaData.initialise(clr, mmgr);
+            keyMetaData.initialise(clr);
         }
         if (valueMetaData != null)
         {
-            valueMetaData.initialise(clr, mmgr);
+            valueMetaData.initialise(clr);
         }
 
         // Interpret the "indexed" value to create our IndexMetaData where it wasn't specified that way
@@ -1034,7 +1083,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
 
         if (orderMetaData != null)
         {
-            orderMetaData.initialise(clr, mmgr);
+            orderMetaData.initialise(clr);
         }
 
         if (hasExtension(MetaData.EXTENSION_MEMBER_CASCADE_PERSIST))
@@ -2504,8 +2553,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             return;
         }
 
-        // Get MetaDataManager (from "file"). TODO Remove this and pass it in
-        MetaDataManager mmgr = getAbstractClassMetaData().getPackageMetaData().getFileMetaData().metaDataManager;
+        MetaDataManager mmgr = getMetaDataManager();
 
         // Find the metadata for the field object
         AbstractClassMetaData otherCmd = null;
@@ -2545,13 +2593,13 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
         }
         else if (hasMap())
         {
-            otherCmd = ((MapMetaData) containerMetaData).getValueClassMetaData(clr, mmgr);
+            otherCmd = ((MapMetaData) containerMetaData).getValueClassMetaData(clr);
             //TODO [CORE-2585] valueCMD may be null because its type is an interface (non persistent interface), 
             //so we should handle the implementation classes
             if (otherCmd == null)
             {
                 // Value not PC so use the Key if it is specified
-                otherCmd = ((MapMetaData)containerMetaData).getKeyClassMetaData(clr, mmgr);
+                otherCmd = ((MapMetaData)containerMetaData).getKeyClassMetaData(clr);
             }
             if (otherCmd == null)
             {
@@ -2560,7 +2608,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
         }
         else if (hasArray())
         {
-            otherCmd = ((ArrayMetaData)containerMetaData).getElementClassMetaData(clr, mmgr);
+            otherCmd = ((ArrayMetaData)containerMetaData).getElementClassMetaData(clr);
         }
         else
         {
@@ -2615,8 +2663,41 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             // Field is bidirectional
             if (mappedBy != null)
             {
-                // This class has the "mapped-by" specified
-                AbstractMemberMetaData otherMmd = otherCmd.getMetaDataForMember(mappedBy);
+                // This class has the "mapped-by" specified, so find the related member
+                AbstractMemberMetaData otherMmd = null;
+                if (mappedBy.indexOf('.') > 0)
+                {
+                    // Cater for dot notation mappedBy where (final) field is embedded, navigate to final (embedded) member
+                    String remainingMappedBy = mappedBy;
+                    boolean first = true;
+                    while (remainingMappedBy.indexOf('.') > 0)
+                    {
+                        int dotPosition = remainingMappedBy.indexOf('.');
+                        String thisMappedBy = remainingMappedBy.substring(0, dotPosition);
+                        otherMmd = otherCmd.getMetaDataForMember(thisMappedBy);
+                        if (otherMmd == null)
+                        {
+                            throw new NucleusUserException(Localiser.msg("044115", 
+                                getAbstractClassMetaData().getFullClassName(), name, remainingMappedBy, otherCmd.getFullClassName())).setFatal();
+                        }
+                        if (!first && !otherMmd.isEmbedded())
+                        {
+                            // TODO Localise this
+                            throw new NucleusUserException("Member " + getFullFieldName() + " has mappedBy using DOT notation but intermediate member " + otherMmd.getFullFieldName() + 
+                                " is not embedded");
+                        }
+
+                        remainingMappedBy = remainingMappedBy.substring(dotPosition+1);
+                        first = false;
+                        otherCmd = getMetaDataManager().getMetaDataForClass(otherMmd.getTypeName(), clr);
+                    }
+
+                    otherMmd = otherCmd.getMetaDataForMember(remainingMappedBy);
+                }
+                else
+                {
+                    otherMmd = otherCmd.getMetaDataForMember(mappedBy);
+                }
                 if (otherMmd == null)
                 {
                     throw new NucleusUserException(Localiser.msg("044115", 
@@ -2630,6 +2711,7 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
                     {
                         relationType = RelationType.ONE_TO_ONE_BI;
                     }
+                    // TODO And if the related is not single-collection???
                 }
                 else if (hasContainer() && relatedMemberMetaData[0].hasContainer())
                 {
@@ -2784,11 +2866,11 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
      * accessed through here.
      * TODO Merge this with relation methods so we only need the relationType/relatedMemberMetaData.
      * @param clr ClassLoader resolver
-     * @param mmgr MetaData manager
      * @return Whether it is for a persistent interface
      */
-    public boolean isPersistentInterface(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public boolean isPersistentInterface(ClassLoaderResolver clr)
     {
+        MetaDataManager mmgr = getMetaDataManager();
         if (hasCollection())
         {
             if (mmgr.isPersistentInterface(getCollection().getElementType()))
@@ -2957,33 +3039,31 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
     /**
      * Accessor for all ClassMetaData referenced by this Field.
      * Part of the "persistence-by-reachability" concept. 
-     * @param orderedCMDs List of ordered ClassMetaData objects (added to).
-     * @param referencedCMDs Set of referenced ClassMetaData objects (added to)
+     * @param orderedCmds List of ordered ClassMetaData objects (added to).
+     * @param referencedCmds Set of referenced ClassMetaData objects (added to)
      * @param clr the ClassLoaderResolver
-     * @param mmgr MetaData manager
      */
-    void getReferencedClassMetaData(final List orderedCMDs, final Set referencedCMDs, final ClassLoaderResolver clr, final MetaDataManager mmgr)
+    void getReferencedClassMetaData(final List<AbstractClassMetaData> orderedCmds, final Set<AbstractClassMetaData> referencedCmds, final ClassLoaderResolver clr)
     {
-        AbstractClassMetaData type_cmd = mmgr.getMetaDataForClass(getType(), clr);
-        if (type_cmd != null)
+        MetaDataManager mmgr = getMetaDataManager();
+
+        AbstractClassMetaData theTypeCmd = mmgr.getMetaDataForClass(getType(), clr);
+        if (theTypeCmd != null)
         {
-            type_cmd.getReferencedClassMetaData(orderedCMDs, referencedCMDs, clr, mmgr);
+            theTypeCmd.getReferencedClassMetaData(orderedCmds, referencedCmds, clr);
         }
 
-        if (containerMetaData != null)
+        if (hasCollection())
         {
-            if (containerMetaData instanceof CollectionMetaData)
-            {
-                ((CollectionMetaData)containerMetaData).getReferencedClassMetaData(orderedCMDs, referencedCMDs, clr, mmgr);
-            }
-            else if (containerMetaData instanceof MapMetaData)
-            {
-                ((MapMetaData)containerMetaData).getReferencedClassMetaData(orderedCMDs, referencedCMDs, clr, mmgr);
-            }
-            else if (containerMetaData instanceof ArrayMetaData)
-            {
-                ((ArrayMetaData)containerMetaData).getReferencedClassMetaData(orderedCMDs, referencedCMDs, clr, mmgr);
-            }
+            getCollection().getReferencedClassMetaData(orderedCmds, referencedCmds, clr);
+        }
+        else if (hasMap())
+        {
+            getMap().getReferencedClassMetaData(orderedCmds, referencedCmds, clr);
+        }
+        else if (hasArray())
+        {
+            getArray().getReferencedClassMetaData(orderedCmds, referencedCmds, clr);
         }
     }
     
@@ -3089,18 +3169,6 @@ public abstract class AbstractMemberMetaData extends MetaData implements Compara
             }
         }
         return true;
-    }
-
-    /**
-     * Returns a string representation of the object using a prefix
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix, String indent)
-    {
-        return super.toString(prefix, indent);
     }
 
     // TODO Enable these and fix compareTo() to do the equivalent

@@ -56,7 +56,7 @@ public class ArrayMetaData extends ContainerMetaData
         element.embedded = arrmd.element.embedded;
         element.serialized = arrmd.element.serialized;
         element.dependent = arrmd.element.dependent;
-        element.type = arrmd.element.type;
+        element.typeName = arrmd.element.typeName;
         element.classMetaData = arrmd.element.classMetaData;
     }
 
@@ -72,52 +72,78 @@ public class ArrayMetaData extends ContainerMetaData
      * Method to populate any defaults, and check the validity of the MetaData.
      * @param clr ClassLoaderResolver to use in loading any classes 
      * @param primary the primary ClassLoader to use (or null)
-     * @param mmgr MetaData manager
      */
-    public void populate(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr)
+    public void populate(ClassLoaderResolver clr, ClassLoader primary)
     {
         AbstractMemberMetaData mmd = (AbstractMemberMetaData)parent;
-        if (!StringUtils.isWhitespace(element.type) && element.type.indexOf(',') > 0)
+        if (!StringUtils.isWhitespace(element.typeName) && element.typeName.indexOf(',') > 0)
         {
             throw new InvalidMemberMetaDataException("044140", mmd.getClassName(), mmd.getName());
         }
 
         // Make sure the type in "element" is set
-        element.populate(((AbstractMemberMetaData)parent).getAbstractClassMetaData().getPackageName(), clr, primary, mmgr);
+        element.populate(mmd.getAbstractClassMetaData().getPackageName(), clr, primary);
 
         // Check the field type and see if it is an array type
-        Class field_type = getMemberMetaData().getType();
-        if (!field_type.isArray())
+        Class fieldType = mmd.getType();
+        if (!fieldType.isArray())
         {
             throw new InvalidMemberMetaDataException("044141", mmd.getClassName(), getFieldName());
         }
+        Class componentType = fieldType.getComponentType();
 
         // "embedded-element"
+        MetaDataManager mmgr = mmd.getMetaDataManager();
         if (element.embedded == null)
         {
             // Assign default for "embedded-element" based on 18.13.1 of JDO 2 spec
-            // Note : this fails when using in the enhancer since not yet PC
-            Class component_type = field_type.getComponentType();
-            if (mmgr.getNucleusContext().getTypeManager().isDefaultEmbeddedType(component_type))
+            if (mmgr.getNucleusContext().getTypeManager().isDefaultEmbeddedType(componentType))
             {
                 element.embedded = Boolean.TRUE;
-            }
-            else if (mmgr.getApiAdapter().isPersistable(component_type) || Object.class.isAssignableFrom(component_type) || component_type.isInterface())
-            {
-                element.embedded = Boolean.FALSE;
             }
             else
             {
-                element.embedded = Boolean.TRUE;
+                // Use "readMetaDataForClass" in case we havent yet initialised the metadata for the element
+                AbstractClassMetaData elemCmd = mmgr.readMetaDataForClass(componentType.getName());
+                if (elemCmd == null)
+                {
+                    // Try to load it just in case using annotations and only pulled in one side of the relation
+                    try
+                    {
+                        elemCmd = mmgr.getMetaDataForClass(componentType, clr);
+                    }
+                    catch (Throwable thr)
+                    {
+                    }
+                }
+                if (elemCmd != null)
+                {
+                    element.embedded = (elemCmd.isEmbeddedOnly() ? Boolean.TRUE : Boolean.FALSE);
+                }
+                else if (componentType.isInterface() || componentType == Object.class)
+                {
+                    // Collection<interface> or Object not explicitly marked as embedded defaults to false
+                    element.embedded = Boolean.FALSE;
+                }
+                else
+                {
+                    // Fallback to true
+                    NucleusLogger.METADATA.debug("Member with collection of elementType=" + componentType.getName()+
+                        " not explicitly marked as embedded, so defaulting to embedded since not persistable");
+                    element.embedded = Boolean.TRUE;
+                }
             }
         }
         if (Boolean.FALSE.equals(element.embedded))
         {
-            // If the user has set a non-PC/non-Interface as not embedded, correct it since not supported.
-            // Note : this fails when using in the enhancer since not yet PC
-            Class component_type = field_type.getComponentType();
-            if (!mmgr.getApiAdapter().isPersistable(component_type) && !component_type.isInterface() && component_type != java.lang.Object.class)
+            // Use "readMetaDataForClass" in case we havent yet initialised the metadata for the element
+            AbstractClassMetaData elemCmd = mmgr.readMetaDataForClass(componentType.getName());
+            if (elemCmd == null && !componentType.isInterface() && componentType != java.lang.Object.class)
             {
+                // If the user has set a non-PC/non-Interface as not embedded, correct it since not supported.
+                // Note : this fails when using in the enhancer since not yet PC
+                NucleusLogger.METADATA.debug("Member with array of element type " + componentType.getName() +
+                    " marked as not embedded, but only persistable as embedded, so resetting");
                 element.embedded = Boolean.TRUE;
             }
         }
@@ -125,12 +151,10 @@ public class ArrayMetaData extends ContainerMetaData
         if (!mmgr.isEnhancing() && !getMemberMetaData().isSerialized())
         {
             // Catch situations that we don't support
-            if (getMemberMetaData().getJoinMetaData() == null &&
-                !mmgr.getApiAdapter().isPersistable(getMemberMetaData().getType().getComponentType()) &&
-                mmgr.supportsORM())
+            if (mmd.getJoinMetaData() == null && !mmgr.getApiAdapter().isPersistable(componentType) && mmgr.supportsORM())
             {
                 // We only support persisting particular array types as byte-streams (non-Java-serialised)
-                String arrayComponentType = getMemberMetaData().getType().getComponentType().getName();
+                String arrayComponentType = componentType.getName();
                 if (!arrayComponentType.equals(ClassNameConstants.BOOLEAN) &&
                     !arrayComponentType.equals(ClassNameConstants.BYTE) &&
                     !arrayComponentType.equals(ClassNameConstants.CHAR) &&
@@ -152,16 +176,16 @@ public class ArrayMetaData extends ContainerMetaData
                 {
                     // Impossible to persist an array of a non-PC element without a join table or without serialising the array
                     // TODO Should this be an exception?
-                    String msg = Localiser.msg("044142", mmd.getClassName(), getFieldName(), getMemberMetaData().getType().getComponentType().getName());
+                    String msg = Localiser.msg("044142", mmd.getClassName(), getFieldName(), arrayComponentType);
                     NucleusLogger.METADATA.warn(msg);
                 }
             }
         }
 
         // Keep a reference to the MetaData for the element
-        if (element.type != null)
+        if (element.typeName != null)
         {
-            Class elementCls = clr.classForName(element.type, primary);
+            Class elementCls = clr.classForName(element.typeName, primary);
             if (mmgr.getApiAdapter().isPersistable(elementCls))
             {
                 mayContainPersistableElements = true;
@@ -170,8 +194,8 @@ public class ArrayMetaData extends ContainerMetaData
         }
         else
         {
-            element.type = field_type.getComponentType().getName();
-            element.classMetaData = mmgr.getMetaDataForClassInternal(field_type.getComponentType(), clr);
+            element.typeName = componentType.getName();
+            element.classMetaData = mmgr.getMetaDataForClassInternal(componentType, clr);
         }
 
         if (element.classMetaData != null)
@@ -186,7 +210,7 @@ public class ArrayMetaData extends ContainerMetaData
             String[] implTypes = getValuesForExtension("implementation-classes");
             for (int i=0;i<implTypes.length;i++)
             {
-                String implTypeName = ClassUtils.createFullClassName(getMemberMetaData().getPackageName(), implTypes[i]);
+                String implTypeName = ClassUtils.createFullClassName(mmd.getPackageName(), implTypes[i]);
                 if (i > 0)
                 {
                     str.append(",");
@@ -210,15 +234,15 @@ public class ArrayMetaData extends ContainerMetaData
                     catch (ClassNotResolvedException cnre2)
                     {
                         // Implementation type not found
-                        throw new InvalidMemberMetaDataException("044116", getMemberMetaData().getClassName(), getMemberMetaData().getName(), implTypes[i]);
+                        throw new InvalidMemberMetaDataException("044116", mmd.getClassName(), mmd.getName(), implTypes[i]);
                     }
                 }
             }
-            addExtension(VENDOR_NAME, "implementation-classes", str.toString()); // Replace with this new value
+            addExtension("implementation-classes", str.toString()); // Replace with this new value
         }
 
         // Make sure anything in the superclass is populated too
-        super.populate(clr, primary, mmgr);
+        super.populate();
 
         setPopulated();
     }
@@ -229,7 +253,7 @@ public class ArrayMetaData extends ContainerMetaData
      */
     public String getElementType()
     {
-        return element.type;
+        return element.typeName;
     }
 
     public String[] getElementTypes()
@@ -245,10 +269,9 @@ public class ArrayMetaData extends ContainerMetaData
     /**
      * Convenience accessor for the Element ClassMetaData.
      * @param clr ClassLoader resolver (in case we need to initialise it)
-     * @param mmgr MetaData manager (in case we need to initialise it)
      * @return element ClassMetaData
      */
-    public AbstractClassMetaData getElementClassMetaData(final ClassLoaderResolver clr, final MetaDataManager mmgr)
+    public AbstractClassMetaData getElementClassMetaData(final ClassLoaderResolver clr)
     {
         if (element.classMetaData != null && !element.classMetaData.isInitialised())
         {
@@ -258,7 +281,7 @@ public class ArrayMetaData extends ContainerMetaData
             {
                 public Object run()
                 {
-                    element.classMetaData.initialise(clr, mmgr);
+                    element.classMetaData.initialise(clr);
                     return null;
                 }
             });
@@ -320,14 +343,15 @@ public class ArrayMetaData extends ContainerMetaData
 
     public ArrayMetaData setElementType(String type)
     {
+        // This is only valid pre-populate
         if (StringUtils.isWhitespace(type))
         {
             // Arrays don't default to Object
-            element.type = null;
+            element.setTypeName(null);
         }
         else
         {
-            element.setType(type);
+            element.setTypeName(type);
         }
         return this;
     }
@@ -352,62 +376,34 @@ public class ArrayMetaData extends ContainerMetaData
 
     /**
      * Accessor for all AbstractClassMetaData referenced by this array.
-     * @param orderedCMDs List of ordered AbstractClassMetaData objects (added to).
-     * @param referencedCMDs Set of all AbstractClassMetaData objects (added to).
+     * @param orderedCmds List of ordered AbstractClassMetaData objects (added to).
+     * @param referencedCmds Set of all AbstractClassMetaData objects (added to).
      * @param clr the ClassLoaderResolver
-     * @param mmgr MetaData manager
      */
-    void getReferencedClassMetaData(final List orderedCMDs, final Set referencedCMDs, final ClassLoaderResolver clr, final MetaDataManager mmgr)
+    void getReferencedClassMetaData(final List<AbstractClassMetaData> orderedCmds, final Set<AbstractClassMetaData> referencedCmds, final ClassLoaderResolver clr)
     {
-        AbstractClassMetaData element_cmd = 
-            mmgr.getMetaDataForClass(getMemberMetaData().getType().getComponentType(), clr);
-        if (element_cmd != null)
+        AbstractClassMetaData elementCmd = getMetaDataManager().getMetaDataForClass(getMemberMetaData().getType().getComponentType(), clr);
+        if (elementCmd != null)
         {
-            element_cmd.getReferencedClassMetaData(orderedCMDs, referencedCMDs, clr, mmgr);
+            elementCmd.getReferencedClassMetaData(orderedCmds, referencedCmds, clr);
         }
     }
 
-    /**
-     * Returns a string representation of the object.
-     * @param prefix The prefix string 
-     * @param indent The indent string 
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
+    public String toString()
     {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<array");
-        if (element.type != null)
+        StringBuilder str = new StringBuilder(super.toString()).append(" [" + element.typeName + "]");
+        if (element.getEmbedded() == Boolean.TRUE)
         {
-            sb.append(" element-type=\"").append(element.type).append("\"");
+            str.append(" embedded");
         }
-        if (element.embedded != null)
+        if (element.getSerialized() == Boolean.TRUE)
         {
-            sb.append(" embedded-element=\"").append(element.embedded).append("\"");
+            str.append(" serialised");
         }
-        if (element.serialized != null)
+        if (element.getDependent() == Boolean.TRUE)
         {
-            sb.append(" serialized-element=\"").append(element.serialized).append("\"");
+            str.append(" dependent");
         }
-        if (element.dependent != null)
-        {
-            sb.append(" dependent-element=\"").append(element.dependent).append("\"");
-        }
-        
-        if (getNoOfExtensions() > 0)
-        {
-            sb.append(">\n");
-
-            // Add extensions
-            sb.append(super.toString(prefix + indent,indent));
-
-            sb.append(prefix).append("</array>\n");
-        }
-        else
-        {
-            sb.append(prefix).append("/>\n");
-        }
-
-        return sb.toString();
+        return str.toString();
     }
 }

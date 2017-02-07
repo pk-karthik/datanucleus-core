@@ -24,6 +24,7 @@ package org.datanucleus.metadata;
 public class UniqueMetaData extends ConstraintMetaData
 {
     private static final long serialVersionUID = -707369332288973459L;
+
     /** Whether the unique is initially deferred. */
     boolean deferred = false;
 
@@ -50,50 +51,5 @@ public class UniqueMetaData extends ConstraintMetaData
     {
         this.deferred = deferred;
         return this;
-    }
-
-    // -------------------------------- Utilities ------------------------------
-
-    /**
-     * Returns a string representation of the object.
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<unique");
-        if (table != null)
-        {
-            sb.append(" table=\"" + table + "\"");
-        }
-        if (deferred)
-        {
-            sb.append(" deferred=\"true\"");
-        }
-        sb.append(name != null ? (" name=\"" + name + "\">\n") : ">\n");
-
-        if (memberNames != null)
-        {
-            for (String memberName : memberNames)
-            {
-                sb.append(prefix).append(indent).append("<field name=\"" + memberName + "\"/>");
-            }
-        }
-        if (columnNames != null)
-        {
-            for (String columnName : columnNames)
-            {
-                sb.append(prefix).append(indent).append("<column name=\"" + columnName + "\"/>");
-            }
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</unique>\n");
-        return sb.toString();
     }
 }

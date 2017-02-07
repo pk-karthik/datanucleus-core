@@ -57,7 +57,7 @@ public class CollectionMetaData extends ContainerMetaData
         element.embedded = collmd.element.embedded;
         element.serialized = collmd.element.serialized;
         element.dependent = collmd.element.dependent;
-        element.type = collmd.element.type;
+        element.typeName = collmd.element.typeName;
         element.classMetaData = collmd.element.classMetaData;
         singleElement = collmd.singleElement;
     }
@@ -74,75 +74,98 @@ public class CollectionMetaData extends ContainerMetaData
      * Method to populate any defaults, and check the validity of the MetaData.
      * @param clr ClassLoaderResolver to use for any loading operations
      * @param primary the primary ClassLoader to use (or null)
-     * @param mmgr MetaData manager
      */
-    public void populate(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr)
+    public void populate(ClassLoaderResolver clr, ClassLoader primary)
     {
         AbstractMemberMetaData mmd = (AbstractMemberMetaData)parent;
-        if (!StringUtils.isWhitespace(element.type) && element.type.indexOf(',') > 0)
+        if (!StringUtils.isWhitespace(element.typeName) && element.typeName.indexOf(',') > 0)
         {
             throw new InvalidMemberMetaDataException("044131", mmd.getClassName(), mmd.getName());
         }
 
         // Make sure the type in "element" is set
-        element.populate(((AbstractMemberMetaData)parent).getAbstractClassMetaData().getPackageName(), 
-            clr, primary, mmgr);
+        element.populate(mmd.getAbstractClassMetaData().getPackageName(), clr, primary);
 
         // "element-type"
-        if (element.type == null)
+        if (element.typeName == null)
         {
             throw new InvalidMemberMetaDataException("044133",  mmd.getClassName(), mmd.getName());
         }
 
-        // Check that the element type exists
+        // Check that the element type exists TODO Remove this since performed in element.populate
         Class elementTypeClass = null;
         try
         {
-            elementTypeClass = clr.classForName(element.type, primary);
+            elementTypeClass = clr.classForName(element.typeName, primary);
+            if (!elementTypeClass.getName().equals(element.typeName))
+            {
+                // The element-type has been resolved from what was specified in the MetaData - update to the fully-qualified name
+                NucleusLogger.METADATA.info(Localiser.msg("044135", getFieldName(), mmd.getClassName(false), element.typeName, elementTypeClass.getName()));
+                element.typeName = elementTypeClass.getName();
+            }
         }
         catch (ClassNotResolvedException cnre)
         {
-            throw new InvalidMemberMetaDataException("044134", getMemberMetaData().getClassName(), getFieldName(), element.type);
-        }
-
-        if (!elementTypeClass.getName().equals(element.type))
-        {
-            // The element-type has been resolved from what was specified in the MetaData - update to the fully-qualified name
-            NucleusLogger.METADATA.info(Localiser.msg("044135", getFieldName(), getMemberMetaData().getClassName(false), element.type, elementTypeClass.getName()));
-            element.type = elementTypeClass.getName();
+            throw new InvalidMemberMetaDataException("044134", mmd.getClassName(), getFieldName(), element.typeName);
         }
 
 		// "embedded-element"
+        MetaDataManager mmgr = getMetaDataManager();
         if (element.embedded == null)
         {
             // Assign default for "embedded-element" based on 18.13.1 of JDO 2 spec
-            // Note : this fails when using in the enhancer since not yet PC
             if (mmgr.getNucleusContext().getTypeManager().isDefaultEmbeddedType(elementTypeClass))
             {
                 element.embedded = Boolean.TRUE;
             }
-            else if (mmgr.getApiAdapter().isPersistable(elementTypeClass) ||
-                Object.class.isAssignableFrom(elementTypeClass) ||
-                elementTypeClass.isInterface())
-            {
-                element.embedded = Boolean.FALSE;
-            }
             else
             {
-                element.embedded = Boolean.TRUE;
+                // Use "readMetaDataForClass" in case we havent yet initialised the metadata for the element
+                AbstractClassMetaData elemCmd = mmgr.readMetaDataForClass(elementTypeClass.getName());
+                if (elemCmd == null)
+                {
+                    // Try to load it just in case using annotations and only pulled in one side of the relation
+                    try
+                    {
+                        elemCmd = mmgr.getMetaDataForClass(elementTypeClass, clr);
+                    }
+                    catch (Throwable thr)
+                    {
+                    }
+                }
+                if (elemCmd != null)
+                {
+                    element.embedded = (elemCmd.isEmbeddedOnly() ? Boolean.TRUE : Boolean.FALSE);
+                }
+                else if (elementTypeClass.isInterface() || elementTypeClass == Object.class)
+                {
+                    // Collection<interface> or Object not explicitly marked as embedded defaults to false
+                    element.embedded = Boolean.FALSE;
+                }
+                else
+                {
+                    // Fallback to true
+                    NucleusLogger.METADATA.debug("Member with collection of elementType=" + elementTypeClass.getName()+
+                        " not explicitly marked as embedded, so defaulting to embedded since not persistable");
+                    element.embedded = Boolean.TRUE;
+                }
             }
         }
-        if (Boolean.FALSE.equals(element.embedded))
+        else if (Boolean.FALSE.equals(element.embedded))
         {
-            // If the user has set a non-PC/non-Interface as not embedded, correct it since not supported.
-            // Note : this fails when using in the enhancer since not yet PC
-            if (!mmgr.getApiAdapter().isPersistable(elementTypeClass) && !elementTypeClass.isInterface() && elementTypeClass != java.lang.Object.class)
+            // Use "readMetaDataForClass" in case we havent yet initialised the metadata for the element
+            AbstractClassMetaData elemCmd = mmgr.readMetaDataForClass(elementTypeClass.getName());
+            if (elemCmd == null && !elementTypeClass.isInterface() && elementTypeClass != java.lang.Object.class)
             {
+                // If the user has set a non-PC/non-Interface as not embedded, correct it since not supported.
+                // Note : this fails when using in the enhancer since not yet PC
+                NucleusLogger.METADATA.debug("Member with collection of element type " + elementTypeClass.getName() +
+                    " marked as not embedded, but only persistable as embedded, so resetting");
                 element.embedded = Boolean.TRUE;
             }
         }
 
-        ElementMetaData elemmd = ((AbstractMemberMetaData)parent).getElementMetaData();
+        ElementMetaData elemmd = mmd.getElementMetaData();
         if (elemmd != null && elemmd.getEmbeddedMetaData() != null)
         {
             element.embedded = Boolean.TRUE;
@@ -168,7 +191,7 @@ public class CollectionMetaData extends ContainerMetaData
             String[] implTypes = getValuesForExtension("implementation-classes");
             for (int i=0;i<implTypes.length;i++)
             {
-                String implTypeName = ClassUtils.createFullClassName(getMemberMetaData().getPackageName(), implTypes[i]);
+                String implTypeName = ClassUtils.createFullClassName(mmd.getPackageName(), implTypes[i]);
                 if (i > 0)
                 {
                     str.append(",");
@@ -192,15 +215,15 @@ public class CollectionMetaData extends ContainerMetaData
                     catch (ClassNotResolvedException cnre2)
                     {
                         // Implementation type not found
-                        throw new InvalidMemberMetaDataException("044116", getMemberMetaData().getClassName(), getMemberMetaData().getName(), implTypes[i]);
+                        throw new InvalidMemberMetaDataException("044116", mmd.getClassName(), mmd.getName(), implTypes[i]);
                     }
                 }
             }
-            addExtension(VENDOR_NAME, "implementation-classes", str.toString()); // Replace with this new value
+            addExtension("implementation-classes", str.toString()); // Replace with this new value
         }
 
         // Make sure anything in the superclass is populated too
-        super.populate(clr, primary, mmgr);
+        super.populate();
 
         setPopulated();
     }
@@ -212,7 +235,7 @@ public class CollectionMetaData extends ContainerMetaData
      */
     public String getElementType()
     {
-        return element.type;
+        return element.typeName;
     }
 
     public String[] getElementTypes()
@@ -228,10 +251,9 @@ public class CollectionMetaData extends ContainerMetaData
     /**
      * Convenience accessor for the Element ClassMetaData.
      * @param clr ClassLoader resolver (in case we need to initialise it)
-     * @param mmgr MetaData manager
      * @return element ClassMetaData
      */
-    public AbstractClassMetaData getElementClassMetaData(final ClassLoaderResolver clr, final MetaDataManager mmgr)
+    public AbstractClassMetaData getElementClassMetaData(final ClassLoaderResolver clr)
     {
         if (element.classMetaData != null && !element.classMetaData.isInitialised())
         {
@@ -241,7 +263,7 @@ public class CollectionMetaData extends ContainerMetaData
             {
                 public Object run()
                 {
-                    element.classMetaData.initialise(clr, mmgr);
+                    element.classMetaData.initialise(clr);
                     return null;
                 }
             });
@@ -300,7 +322,8 @@ public class CollectionMetaData extends ContainerMetaData
 
     public CollectionMetaData setElementType(String type)
     {
-        element.setType(type);
+        // This is only valid pre-populate
+        element.setTypeName(type);
         return this;
     }
 
@@ -327,58 +350,37 @@ public class CollectionMetaData extends ContainerMetaData
         this.singleElement = singleElement;
         return this;
     }
-    
-    // ------------------------------- Utilities -------------------------------
 
     /**
      * Accessor for all ClassMetaData referenced by this array.
-     * @param orderedCMDs List of ordered ClassMetaData objects (added to).
-     * @param referencedCMDs Set of all ClassMetaData objects (added to).
+     * @param orderedCmds List of ordered ClassMetaData objects (added to).
+     * @param referencedCmds Set of all ClassMetaData objects (added to).
      * @param clr the ClassLoaderResolver
-     * @param mmgr MetaData manager
      */
-    void getReferencedClassMetaData(final List orderedCMDs, final Set referencedCMDs,
-            final ClassLoaderResolver clr, final MetaDataManager mmgr)
-    { 
-        AbstractClassMetaData element_cmd = mmgr.getMetaDataForClass(element.type, clr);
-        if (element_cmd != null)
+    void getReferencedClassMetaData(final List<AbstractClassMetaData> orderedCmds, final Set<AbstractClassMetaData> referencedCmds, final ClassLoaderResolver clr)
+    {
+        AbstractClassMetaData elementCmd = getMetaDataManager().getMetaDataForClass(element.typeName, clr);
+        if (elementCmd != null)
         {
-            element_cmd.getReferencedClassMetaData(orderedCMDs, referencedCMDs, clr, mmgr);
+            elementCmd.getReferencedClassMetaData(orderedCmds, referencedCmds, clr);
         }
     }
 
-    /**
-     * Returns a string representation of the object.
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
+    public String toString()
     {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<collection element-type=\"").append(element.type).append("\"");
-        if (element.embedded != null)
+        StringBuilder str = new StringBuilder(super.toString()).append(" [" + element.typeName + "]");
+        if (element.getEmbedded() == Boolean.TRUE)
         {
-            sb.append(" embedded-element=\"").append(element.embedded).append("\"");
+            str.append(" embedded");
         }
-        if (element.dependent != null)
+        if (element.getSerialized() == Boolean.TRUE)
         {
-            sb.append(" dependent-element=\"").append(element.dependent).append("\"");
+            str.append(" serialised");
         }
-        if (element.serialized != null)
+        if (element.getDependent() == Boolean.TRUE)
         {
-            sb.append(" serialized-element=\"").append(element.serialized).append("\"");
+            str.append(" dependent");
         }
-        if (singleElement)
-        {
-            sb.append(" single-element=\"").append(singleElement).append("\"");
-        }
-        sb.append(">\n");
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent)); 
- 
-        sb.append(prefix).append("</collection>\n");
-        return sb.toString();
+        return str.toString();
     }
 }

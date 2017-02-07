@@ -32,6 +32,7 @@ package org.datanucleus.metadata;
 public class IndexMetaData extends ConstraintMetaData
 {
     private static final long serialVersionUID = -2262544953953181136L;
+
     /**
      * You can use UNIQUE constraints to ensure that no duplicate values are
      * entered in specific columns that do not participate in a primary key.
@@ -77,46 +78,5 @@ public class IndexMetaData extends ConstraintMetaData
     {
         this.unique = unique;
         return this;
-    }
-
-    // -------------------------------- Utilities ------------------------------
-
-    /**
-     * Returns a string representation of the object.
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<index unique=\"" + unique + "\"");
-        if (table != null)
-        {
-            sb.append(" table=\"" + table + "\"");
-        }
-        sb.append(name != null ? (" name=\"" + name + "\">\n") : ">\n");
-
-        if (memberNames != null)
-        {
-            for (String memberName : memberNames)
-            {
-                sb.append(prefix).append(indent).append("<field name=\"" + memberName + "\"/>");
-            }
-        }
-        if (columnNames != null)
-        {
-            for (String columnName : columnNames)
-            {
-                sb.append(prefix).append(indent).append("<column name=\"" + columnName + "\"/>");
-            }
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</index>\n");
-        return sb.toString();
     }
 }

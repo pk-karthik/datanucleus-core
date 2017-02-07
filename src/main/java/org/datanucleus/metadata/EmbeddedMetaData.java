@@ -106,15 +106,16 @@ public class EmbeddedMetaData extends MetaData
      * This performs checks on the validity of the field types for embedding.
      * @param clr The class loader to use where necessary
      * @param primary the primary ClassLoader to use (or null)
-     * @param mmgr MetaData manager
      */
-    public void populate(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr)
+    public void populate(ClassLoaderResolver clr, ClassLoader primary)
     {
         // Find the class that the embedded fields apply to
-        MetaData md = getParent();
+        MetaDataManager mmgr = getMetaDataManager();
         AbstractMemberMetaData apmd = null; // Field that has <embedded>
         AbstractClassMetaData embCmd = null; // Definition for the embedded class
         String embeddedType = null; // Name of the embedded type
+
+        MetaData md = getParent();
         if (md instanceof AbstractMemberMetaData)
         {
             // PC embedded in PC object
@@ -200,12 +201,12 @@ public class EmbeddedMetaData extends MetaData
         Iterator<AbstractMemberMetaData> memberIter = members.iterator();
         while (memberIter.hasNext())
         {
-            Object fld = memberIter.next();
+            AbstractMemberMetaData mmd = memberIter.next();
             // TODO Should allow PropertyMetaData here I think
-            if (embCmd instanceof InterfaceMetaData && fld instanceof FieldMetaData)
+            if (embCmd instanceof InterfaceMetaData && mmd instanceof FieldMetaData)
             {
                 // Cannot have a field within a persistent interface
-                throw new InvalidMemberMetaDataException("044129", apmd.getClassName(), apmd.getName(), ((AbstractMemberMetaData)fld).getName());
+                throw new InvalidMemberMetaDataException("044129", apmd.getClassName(), apmd.getName(), mmd.getName());
             }
         }
 
@@ -216,6 +217,7 @@ public class EmbeddedMetaData extends MetaData
         }
 
         // Add fields for the class that aren't in the <embedded> block using Reflection.
+        // TODO Consider getting rid of this ... should fall back to the ClassMetaData for the embedded class
         // NOTE 1 : We ignore fields in superclasses
         // NOTE 2 : We ignore "enhanced" fields (added by the JDO enhancer)
         // NOTE 3 : We ignore inner class fields (containing "$") 
@@ -236,8 +238,7 @@ public class EmbeddedMetaData extends MetaData
                 // Limit to fields in this class, that aren't enhanced fields that aren't inner class fields, and that aren't static
                 if (cls_fields[i].getDeclaringClass().getName().equals(embeddedType) &&
                     !mmgr.isEnhancerField(cls_fields[i].getName()) &&
-                    !ClassUtils.isInnerClass(cls_fields[i].getName()) &&
-                    !Modifier.isStatic(cls_fields[i].getModifiers()))
+                    !ClassUtils.isInnerClass(cls_fields[i].getName()) && !Modifier.isStatic(cls_fields[i].getModifiers()))
                 {
                     // Find if there is a AbstractMemberMetaData for this field.
                     if (!memberNames.contains(cls_fields[i].getName()))
@@ -297,6 +298,7 @@ public class EmbeddedMetaData extends MetaData
                     // that aren't inner class fields, and that aren't static
                     if (clsMethods[i].getDeclaringClass().getName().equals(embeddedType) &&
                         (clsMethods[i].getName().startsWith("get") || clsMethods[i].getName().startsWith("is")) &&
+                        !clsMethods[i].isBridge() &&
                         !ClassUtils.isInnerClass(clsMethods[i].getName()))
                     {
                         // Find if there is a PropertyMetaData for this field
@@ -376,24 +378,41 @@ public class EmbeddedMetaData extends MetaData
                 fieldFmd.populate(clr, null, cls_method, primary, mmgr);
             }
         }
+
+        if (embCmd.isEmbeddedOnly())
+        {
+            // Check for recursive embedding of the same type and throw exception if so.
+            // We do not support recursive embedding since if a 1-1 this would result in adding embedded columns infinite times, and for 1-N infinite join tables.
+            for (AbstractMemberMetaData mmd : members)
+            {
+                if (mmd.getTypeName().equals(embCmd.getFullClassName()))
+                {
+                    throw new InvalidMetaDataException("044128", embCmd.getFullClassName(), mmd.getName());
+                }
+                else if (mmd.hasCollection() && mmd.getCollection().getElementType().equals(embCmd.getFullClassName()))
+                {
+                    throw new InvalidMetaDataException("044128", embCmd.getFullClassName(), mmd.getName());
+                }
+            }
+        }
     }
 
     /**
-     * Method to initialise the object, creating all internal convenience
-     * arrays.
+     * Method to initialise the object, creating all internal convenience arrays.
+     * @param clr ClassLoader resolver
      */
-    public void initialise(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public void initialise(ClassLoaderResolver clr)
     {
         memberMetaData = new AbstractMemberMetaData[members.size()];
         for (int i=0; i<memberMetaData.length; i++)
         {
             memberMetaData[i] = members.get(i);
-            memberMetaData[i].initialise(clr, mmgr);
+            memberMetaData[i].initialise(clr);
         }
 
         if (discriminatorMetaData != null)
         {
-            discriminatorMetaData.initialise(clr, mmgr);
+            discriminatorMetaData.initialise(clr);
         }
 
         setInitialised();
@@ -517,50 +536,22 @@ public class EmbeddedMetaData extends MetaData
         return pmd;
     }
 
-    // ------------------------------- Utilities -------------------------------
-
-    /**
-     * Returns a string representation of the object using a prefix
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
+    public String toString()
     {
-        // Field needs outputting so generate metadata
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<embedded");
-        if (ownerMember != null)
+        StringBuilder str = new StringBuilder(super.toString());
+        if (memberMetaData != null)
         {
-            sb.append(" owner-field=\"" + ownerMember + "\"");
+            str.append(" [" + memberMetaData.length + " members] (");
+            for (int i=0;i<memberMetaData.length;i++)
+            {
+                if (i > 0)
+                {
+                    str.append(", ");
+                }
+                str.append(memberMetaData[i].getName());
+            }
+            str.append(")");
         }
-        if (nullIndicatorColumn != null)
-        {
-            sb.append(" null-indicator-column=\"" + nullIndicatorColumn + "\"");
-        }
-        if (nullIndicatorValue != null)
-        {
-            sb.append(" null-indicator-value=\"" + nullIndicatorValue + "\"");
-        }
-        sb.append(">\n");
-
-        if (discriminatorMetaData != null)
-        {
-            sb.append(discriminatorMetaData.toString(prefix+indent, indent));
-        }
-
-        // Add fields
-        for (int i=0; i<members.size(); i++)
-        {
-            AbstractMemberMetaData f = members.get(i);
-            sb.append(f.toString(prefix + indent,indent));
-        }
-        
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix + "</embedded>\n");
-        return sb.toString();
+        return str.toString();
     }
 }

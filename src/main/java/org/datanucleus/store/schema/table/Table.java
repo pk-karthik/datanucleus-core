@@ -58,13 +58,12 @@ public interface Table
      */
     Column getColumnForPosition(int pos);
 
-    Column getDatastoreIdColumn();
-
-    Column getVersionColumn();
-
-    Column getDiscriminatorColumn();
-
-    Column getMultitenancyColumn();
+    /**
+     * Accessor for the surrogate column of the specified type.
+     * @param colType The type of surrogate column
+     * @return The column definition, if it exists for this table
+     */
+    Column getSurrogateColumn(SurrogateColumnType colType);
 
     /**
      * Accessor for the column with the supplied name (if present).

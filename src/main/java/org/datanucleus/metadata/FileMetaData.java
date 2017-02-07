@@ -32,10 +32,6 @@ public class FileMetaData extends MetaData
 {
     private static final long serialVersionUID = 6622356672262681288L;
 
-    // TODO Remove this, and pass in to populate/initialise as required
-    /** Manager for this MetaData object. Used in AbstractMemberMetaData.setRelation process. */
-    transient protected MetaDataManager metaDataManager;
-
     /** Type of file (JDO, ORM, JDOQUERY, etc) */
     protected MetadataFileType type;
 
@@ -66,21 +62,12 @@ public class FileMetaData extends MetaData
     /** List of event listeners defined for this file. */
     protected List<EventListenerMetaData> listeners = null;
 
-    /**
-     * Constructor.
-     */
     public FileMetaData()
     {
     }
-
-    /**
-     * Method to set the MetaDataManager in use.
-     * TODO Remove this
-     * @param mmgr MetaDataManager to use
-     */
-    public void setMetaDataManager(MetaDataManager mmgr)
+    public FileMetaData(String filename)
     {
-        this.metaDataManager = mmgr;
+        this.filename = filename;
     }
 
     public String getFilename()
@@ -400,69 +387,5 @@ public class FileMetaData extends MetaData
             return null;
         }
         return queryResultMetaData.toArray(new QueryResultMetaData[queryResultMetaData.size()]);
-    }
-
-    // -------------------------------- Utilities ------------------------------
-
-    /**
-     * Returns a string representation of the object.
-     * @param prefix Any prefix for the output
-     * @param indent The indent
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix, String indent)
-    {
-        if (indent == null)
-        {
-            indent = "";
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<jdo");
-        if (catalog != null)
-        {
-            sb.append(" catalog=\"" + catalog + "\"");
-        }
-        if (schema != null)
-        {
-            sb.append(" schema=\"" + schema + "\"");
-        }
-        sb.append(">\n");
-
-        // Add packages
-        if (packages != null)
-        {
-            Iterator<PackageMetaData> iter = packages.iterator();
-            while (iter.hasNext())
-            {
-                sb.append(iter.next().toString(indent,indent));
-            }
-        }
-
-        // Add queries
-        if (queries != null)
-        {
-            Iterator iter = queries.iterator();
-            while (iter.hasNext())
-            {
-                sb.append(((QueryMetaData)iter.next()).toString(indent, indent));
-            }
-        }
-
-        // Add fetch plans
-        if (fetchPlans != null)
-        {
-            Iterator iter = fetchPlans.iterator();
-            while (iter.hasNext())
-            {
-                sb.append(((FetchPlanMetaData)iter.next()).toString(indent, indent));
-            }
-        }
-
-        // Add extensions
-        sb.append(super.toString(indent,indent)); 
-
-        sb.append("</jdo>");
-        return sb.toString();
     }
 }

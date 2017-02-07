@@ -288,7 +288,6 @@ public class L2CachePopulateFieldManager extends AbstractFieldManager
     public void storeObjectField(int fieldNumber, Object value)
     {
         AbstractMemberMetaData mmd = op.getClassMetaData().getMetaDataForManagedMemberAtAbsolutePosition(fieldNumber);
-        
         if (mmd.getPersistenceModifier() == FieldPersistenceModifier.TRANSACTIONAL)
         {
             // Cannot cache transactional fields
@@ -364,11 +363,9 @@ public class L2CachePopulateFieldManager extends AbstractFieldManager
         }
     }
 
-    private void processMapContainer(int fieldNumber, Object mapContainer, AbstractMemberMetaData mmd,
-            MapHandler<Object> containerHandler)
+    private void processMapContainer(int fieldNumber, Object mapContainer, AbstractMemberMetaData mmd, MapHandler<Object> containerHandler)
     {
         RelationType relType = mmd.getRelationType(ec.getClassLoaderResolver());
-
         if (relType != RelationType.NONE && (containerHandler.isSerialised(mmd) || containerHandler.isEmbedded(mmd)))
         {
             // TODO Support serialised/embedded elements
@@ -406,11 +403,9 @@ public class L2CachePopulateFieldManager extends AbstractFieldManager
         }
     }
 
-    private void processElementContainer(int fieldNumber, Object container, AbstractMemberMetaData mmd,
-            ElementContainerHandler<Object, ElementContainerAdapter<Object>> containerHandler)
+    private void processElementContainer(int fieldNumber, Object container, AbstractMemberMetaData mmd, ElementContainerHandler<Object, ElementContainerAdapter<Object>> containerHandler)
     {
         RelationType relType = mmd.getRelationType(ec.getClassLoaderResolver());
-        
         if (relType == RelationType.NONE)
         {
             // Container<Non-PC>
@@ -479,7 +474,8 @@ public class L2CachePopulateFieldManager extends AbstractFieldManager
                 }
 
                 // Put Container<OID> in CachedPC
-                cachedPC.setFieldValue(fieldNumber, containerToCacheAdapter.getContainer());
+                Object cachedValue = containerToCacheAdapter.getContainer();
+                cachedPC.setFieldValue(fieldNumber, cachedValue);
             }
             catch (Exception e)
             {
@@ -511,7 +507,11 @@ public class L2CachePopulateFieldManager extends AbstractFieldManager
                 ObjectProvider valueOP = ec.findObjectProvider(value);
                 int[] loadedFields = valueOP.getLoadedFieldNumbers();
                 CachedPC valueCachedPC = new CachedPC(value.getClass(), valueOP.getLoadedFields(), null);
-                valueOP.provideFields(loadedFields, new L2CachePopulateFieldManager(valueOP, valueCachedPC));
+                if (loadedFields != null && loadedFields.length > 0)
+                {
+                    // Set the values of any fields that are loaded
+                    valueOP.provideFields(loadedFields, new L2CachePopulateFieldManager(valueOP, valueCachedPC));
+                }
 
                 cachedPC.setFieldValue(fieldNumber, valueCachedPC);
             }

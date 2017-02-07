@@ -29,7 +29,7 @@ import org.datanucleus.metadata.AbstractClassMetaData;
 import org.datanucleus.state.CallbackHandler;
 import org.datanucleus.state.ObjectProviderFactory;
 import org.datanucleus.store.autostart.AutoStartMechanism;
-import org.datanucleus.transaction.TransactionManager;
+import org.datanucleus.transaction.ResourcedTransactionManager;
 import org.datanucleus.transaction.jta.JTASyncRegistry;
 
 /**
@@ -75,14 +75,18 @@ public interface PersistenceNucleusContext extends StoreNucleusContext
 
     ImplementationCreator getImplementationCreator();
 
-    TransactionManager getTransactionManager();
+    ResourcedTransactionManager getResourcedTransactionManager();
 
     /**
-     * Accessor for the JTA transaction manager (if using JTA).
+     * Accessor for the JTA transaction manager, when using JTA.
      * @return the JTA Transaction Manager
      */
     javax.transaction.TransactionManager getJtaTransactionManager();
 
+    /**
+     * Accessor for the JTA Synchronization registry, when using JTA.
+     * @return The JTASyncRegistry (or null if not using JTA)
+     */
     JTASyncRegistry getJtaSyncRegistry();
 
     /**

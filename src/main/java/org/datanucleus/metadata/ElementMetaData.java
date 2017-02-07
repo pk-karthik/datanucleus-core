@@ -21,7 +21,6 @@ Contributors:
 package org.datanucleus.metadata;
 
 import org.datanucleus.ClassLoaderResolver;
-import org.datanucleus.util.StringUtils;
 
 /**
  * This element specifies the mapping for the element component of arrays and collections.
@@ -54,25 +53,40 @@ public class ElementMetaData extends AbstractElementMetaData
      * Populate the MetaData.
      * @param clr Class loader to use
      * @param primary the primary ClassLoader to use (or null)
-     * @param mmgr MetaData manager
      */
-    public void populate(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr)
+    public void populate(ClassLoaderResolver clr, ClassLoader primary)
     {
-        // Make sure element type is set and is valid
-        AbstractMemberMetaData fmd = (AbstractMemberMetaData)parent;
-        if (fmd.hasCollection())
+        // Populate the element metadata
+        AbstractMemberMetaData mmd = (AbstractMemberMetaData)parent;
+        if (mmd.hasCollection())
         {
-            fmd.getCollection().element.populate(fmd.getAbstractClassMetaData().getPackageName(), clr, primary, mmgr);
+            if (hasExtension(MetaData.EXTENSION_MEMBER_TYPE_CONVERTER_NAME))
+            {
+                if (mmd.getCollection().element.embedded == null)
+                {
+                    // Default to embedded since the converter process requires it
+                    mmd.getCollection().element.embedded = Boolean.TRUE;
+                }
+            }
+            mmd.getCollection().element.populate(mmd.getAbstractClassMetaData().getPackageName(), clr, primary);
         }
-        else if (fmd.hasArray())
+        else if (mmd.hasArray())
         {
-            fmd.getArray().element.populate(fmd.getAbstractClassMetaData().getPackageName(), clr, primary, mmgr);
+            if (hasExtension(MetaData.EXTENSION_MEMBER_TYPE_CONVERTER_NAME))
+            {
+                if (mmd.getArray().element.embedded == null)
+                {
+                    // Default to embedded since the converter process requires it
+                    mmd.getArray().element.embedded = Boolean.TRUE;
+                }
+            }
+            mmd.getArray().element.populate(mmd.getAbstractClassMetaData().getPackageName(), clr, primary);
         }
+
+        // TODO Remove this since we should only have <embedded> when the user defines it
         if (embeddedMetaData == null && 
-            ((AbstractMemberMetaData)parent).hasCollection() && 
-            ((AbstractMemberMetaData)parent).getCollection().isEmbeddedElement() &&
-            ((AbstractMemberMetaData)parent).getJoinMetaData() != null &&
-            ((AbstractMemberMetaData)parent).getCollection().elementIsPersistent())
+            mmd.hasCollection() && mmd.getCollection().isEmbeddedElement() &&
+            mmd.getJoinMetaData() != null && mmd.getCollection().elementIsPersistent())
         {
             // User has specified that the element is embedded in a join table but not how we embed it
             // so add a dummy definition
@@ -80,74 +94,6 @@ public class ElementMetaData extends AbstractElementMetaData
             embeddedMetaData.parent = this;
         }
 
-        super.populate(clr, primary, mmgr);
-    }
-
-    // ------------------------------- Utilities -------------------------------
-
-    /**
-     * Returns a string representation of the object using a prefix
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        // Field needs outputting so generate metadata
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<element");
-        if (mappedBy != null)
-        {
-            sb.append(" mapped-by=\"" + mappedBy + "\"");
-        }
-        if (!StringUtils.isWhitespace(table))
-        {
-            sb.append(" table=\"" + table + "\"");
-        }
-        if (!StringUtils.isWhitespace(columnName))
-        {
-            sb.append(" column=\"" + columnName + "\"");
-        }
-        sb.append(">\n");
-
-        // Add columns
-        if (columns != null)
-        {
-            for (ColumnMetaData colmd : columns)
-            {
-                sb.append(colmd.toString(prefix + indent,indent));
-            }
-        }
-
-        // Add index metadata
-        if (indexMetaData != null)
-        {
-            sb.append(indexMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add unique metadata
-        if (uniqueMetaData != null)
-        {
-            sb.append(uniqueMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add embedded metadata
-        if (embeddedMetaData != null)
-        {
-            sb.append(embeddedMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add foreign-key metadata
-        if (foreignKeyMetaData != null)
-        {
-            sb.append(foreignKeyMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</element>\n");
-        return sb.toString();
+        super.populate(clr, primary);
     }
 }

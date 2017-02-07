@@ -957,6 +957,7 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
                 {
                     classNames.addAll(pumd.getClassNames());
                 }
+                // TODO Process pumd.getConverters
                 if (getNucleusContext() instanceof PersistenceNucleusContextImpl) // TODO Why not when enhancing? document it
                 {
                     Set jarFileNames = pumd.getJarFiles();
@@ -1237,6 +1238,14 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
             }
         }
     }
+
+    /**
+     * Load the metadata for the specified class (if available).
+     * @param c The class
+     * @param clr ClassLoader resolver
+     * @return The metadata for this class (if found)
+     */
+    protected abstract AbstractClassMetaData loadMetaDataForClass(Class c, ClassLoaderResolver clr);
 
     /* (non-Javadoc)
      * @see org.datanucleus.metadata.MetaDataManager#unloadMetaDataForClass(java.lang.String)
@@ -1653,16 +1662,12 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
                 listenersLoadedMetaData = new ArrayList<AbstractClassMetaData>();
             }
 
-            cmd = null;
+            // Find the metadata if present, allowing it to be loaded
+            cmd = getMetaDataForClassInternal(c, clr);
             if (c.isInterface())
             {
                 // "persistent-interface" - check if it has class built at runtime and return the MetaData for it 
                 cmd = getClassMetaDataForImplementationOfPersistentInterface(c.getName());
-            }
-            else
-            {
-                // "persistent-class"
-                cmd = getMetaDataForClassInternal(c, clr);
             }
 
             if (cmd != null)
@@ -1786,7 +1791,30 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
      * @see org.datanucleus.metadata.MetaDataManager#getMetaDataForClassInternal(java.lang.Class, org.datanucleus.ClassLoaderResolver)
      */
     @Override
-    public abstract AbstractClassMetaData getMetaDataForClassInternal(Class c, ClassLoaderResolver clr);
+    public AbstractClassMetaData getMetaDataForClassInternal(Class c, ClassLoaderResolver clr)
+    {
+        if (c.isArray())
+        {
+            // Only particular classes can have metadata
+            return null;
+        }
+
+        // If we know that this class/interface has no MetaData/annotations don't bother searching
+        if (isClassWithoutPersistenceInfo(c.getName()))
+        {
+            return null;
+        }
+
+        // Check if we have the MetaData loaded
+        AbstractClassMetaData cmd = classMetaDataByClass.get(c.getName());
+        if (cmd != null)
+        {
+            return cmd;
+        }
+
+        // Try to load metadata for this class
+        return loadMetaDataForClass(c, clr);
+    }
 
     /**
      * Internal method called when we want to register the metadata for a class/interface.
@@ -2358,6 +2386,11 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
             // TODO If classMetaData not known load it?
             return discrimValue;
         }
+        else if (dismd.getStrategy() == DiscriminatorStrategy.ENTITY_NAME)
+        {
+            AbstractClassMetaData cmd = classMetaDataByEntityName.get(discrimValue);
+            return (cmd != null) ? cmd.getFullClassName() : null;
+        }
         else if (dismd.getStrategy() == DiscriminatorStrategy.VALUE_MAP)
         {
             AbstractClassMetaData baseCmd = (AbstractClassMetaData)((InheritanceMetaData)dismd.getParent()).getParent();
@@ -2677,7 +2710,6 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
      */
     protected void populateFileMetaData(FileMetaData filemd, ClassLoaderResolver clr, ClassLoader primary)
     {
-        filemd.setMetaDataManager(this);
         for (int i=0;i<filemd.getNoOfPackages();i++)
         {
             PackageMetaData pmd = filemd.getPackage(i);
@@ -2705,8 +2737,8 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
         for (int i=0;i<filemd.getNoOfPackages();i++)
         {
             PackageMetaData pmd = filemd.getPackage(i);
-            pmd.initialise(clr, this);
-            
+            pmd.initialise(clr);
+
             for (int j=0;j<pmd.getNoOfClasses();j++)
             {
                 ClassMetaData cmd = pmd.getClass(j);
@@ -2841,7 +2873,6 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
         // Check for annotations (use dummy file/package so we have a place for it)
         FileMetaData filemd = new FileMetaData();
         filemd.setType(MetadataFileType.ANNOTATIONS);
-        filemd.setMetaDataManager(this);
         PackageMetaData pmd = filemd.newPackageMetadata(clsPackageName);
         AbstractClassMetaData cmd = annotationManager.getMetaDataForClass(cls, pmd, clr);
         if (cmd != null)
@@ -2935,7 +2966,7 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
                 {
                     try
                     {
-                        cmd.initialise(clr, MetaDataManagerImpl.this);
+                        cmd.initialise(clr);
                     }
                     // Catch and rethrow exception since AccessController.doPrivileged swallows it!
                     catch (NucleusException ne)
@@ -3092,21 +3123,19 @@ public abstract class MetaDataManagerImpl implements Serializable, MetaDataManag
      * @param clr ClassLoaderResolver resolver for loading any classes.
      * @return List of ClassMetaData referenced by the origin
      */
-    protected List<AbstractClassMetaData> getReferencedClassMetaData(AbstractClassMetaData cmd,
-        ClassLoaderResolver clr)
+    protected List<AbstractClassMetaData> getReferencedClassMetaData(AbstractClassMetaData cmd, ClassLoaderResolver clr)
     {
         if (cmd == null)
         {
             return null;
         }
 
-        List<AbstractClassMetaData> orderedCMDs = new ArrayList();
-        Set referencedCMDs = new HashSet();
-
         // Use the ClassMetaData to tell us about its classes
-        cmd.getReferencedClassMetaData(orderedCMDs, referencedCMDs, clr, this);
+        List<AbstractClassMetaData> orderedCmds = new ArrayList<>();
+        Set<AbstractClassMetaData> referencedCmds = new HashSet<>();
+        cmd.getReferencedClassMetaData(orderedCmds, referencedCmds, clr);
 
-        return orderedCMDs;
+        return orderedCmds;
     }
 
     /* (non-Javadoc)

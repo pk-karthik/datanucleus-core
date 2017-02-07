@@ -96,8 +96,10 @@ public class IdentityUtils
         return id instanceof SingleFieldId;
     }
 
-    /* (non-Javadoc)
-     * @see org.datanucleus.api.ApiAdapter#isDatastoreIdentity(java.lang.Object)
+    /**
+     * Accessor for whether the provided id is datastore identity.
+     * @param id The identity to check
+     * @return Whether it is datastore identity
      */
     public static boolean isDatastoreIdentity(Object id)
     {
@@ -215,7 +217,16 @@ public class IdentityUtils
             {
                 String className = persistableId.substring(0, persistableId.indexOf(':'));
                 cmd = ec.getMetaDataManager().getMetaDataForClass(className, clr);
+
                 String idStr = persistableId.substring(persistableId.indexOf(':')+1);
+                if (cmd.getObjectidClass().equals(ClassNameConstants.IDENTITY_SINGLEFIELD_OBJECT))
+                {
+                    // For ObjectId we need to pass "PkFieldType:{id}" - see ObjectId.toString()
+                    // For all other SingleFieldId we pass "{id}" - see XXXId.toString()
+                    int[] pkMemberPositions = cmd.getPKMemberPositions();
+                    AbstractMemberMetaData pkMmd = cmd.getMetaDataForManagedMemberAtAbsolutePosition(pkMemberPositions[0]);
+                    idStr = pkMmd.getTypeName() + ":" + idStr;
+                }
                 id = ec.getNucleusContext().getIdentityManager().getApplicationId(clr, cmd, idStr);
             }
             else
@@ -506,19 +517,19 @@ public class IdentityUtils
             AbstractClassMetaData cmd = null;
             if (fieldRole == FieldRole.ROLE_COLLECTION_ELEMENT)
             {
-                cmd = mmd.getCollection().getElementClassMetaData(clr, ec.getMetaDataManager());
+                cmd = mmd.getCollection().getElementClassMetaData(clr);
             }
             else if (fieldRole == FieldRole.ROLE_ARRAY_ELEMENT)
             {
-                cmd = mmd.getArray().getElementClassMetaData(clr, ec.getMetaDataManager());
+                cmd = mmd.getArray().getElementClassMetaData(clr);
             }
             else if (fieldRole == FieldRole.ROLE_MAP_KEY)
             {
-                cmd = mmd.getMap().getKeyClassMetaData(clr, ec.getMetaDataManager());
+                cmd = mmd.getMap().getKeyClassMetaData(clr);
             }
             else if (fieldRole == FieldRole.ROLE_MAP_KEY)
             {
-                cmd = mmd.getMap().getKeyClassMetaData(clr, ec.getMetaDataManager());
+                cmd = mmd.getMap().getKeyClassMetaData(clr);
             }
             else
             {

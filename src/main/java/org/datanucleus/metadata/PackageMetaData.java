@@ -63,7 +63,7 @@ public class PackageMetaData extends MetaData
         this.name = name != null ? name : "";
     }
 
-    public void initialise(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public void initialise(ClassLoaderResolver clr)
     {
         if (this.catalog == null && ((FileMetaData)parent).getCatalog() != null)
         {
@@ -75,7 +75,7 @@ public class PackageMetaData extends MetaData
             // Nothing specified for this package, but file has a value
             this.schema = ((FileMetaData)parent).getSchema();
         }
-        super.initialise(clr, mmgr);
+        super.initialise(clr);
     }
 
     /**
@@ -304,6 +304,11 @@ public class PackageMetaData extends MetaData
         return cmd;
     }
 
+    /**
+     * Method to remove a class from this metadata definition.
+     * This is of use where we read in metadata only to find that the class that it pertains to is not in the CLASSPATH.
+     * @param cmd Metadata for the class to remove
+     */
     public void removeClass(AbstractClassMetaData cmd)
     {
         if (classes != null)
@@ -452,64 +457,5 @@ public class PackageMetaData extends MetaData
     {
         this.schema = StringUtils.isWhitespace(schema) ? null : schema;
         return this;
-    }
-
-    // ------------------------------ Utilities --------------------------------
-
-    /**
-     * Returns a string representation of the object.
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<package name=\"" + name + "\"");
-        if (catalog != null)
-        {
-            sb.append(" catalog=\"" + catalog + "\"");
-        }
-        if (schema != null)
-        {
-            sb.append(" schema=\"" + schema + "\"");
-        }
-        sb.append(">\n");
-
-        // Add interfaces
-        if (interfaces != null)
-        {
-            Iterator int_iter = interfaces.iterator();
-            while (int_iter.hasNext())
-            {
-                sb.append(((InterfaceMetaData)int_iter.next()).toString(prefix + indent,indent));
-            }
-        }
-
-        // Add classes
-        if (classes != null)
-        {
-            Iterator cls_iter = classes.iterator();
-            while (cls_iter.hasNext())
-            {
-                sb.append(((ClassMetaData)cls_iter.next()).toString(prefix + indent,indent));
-            }
-        }
-
-        // Add sequences
-        if (sequences != null)
-        {
-            Iterator seq_iter = sequences.iterator();
-            while (seq_iter.hasNext())
-            {
-                sb.append(((SequenceMetaData)seq_iter.next()).toString(prefix + indent,indent));
-            }
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</package>\n");
-        return sb.toString();
     }
 }

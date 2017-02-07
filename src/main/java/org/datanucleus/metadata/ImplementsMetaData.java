@@ -59,9 +59,8 @@ public class ImplementsMetaData extends MetaData
      * Method to populate the details of the implements.
      * @param clr ClassLoaderResolver to use in loading any classes
      * @param primary the primary ClassLoader to use (or null)
-     * @param mmgr MetaData manager
      */
-    public synchronized void populate(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr)
+    public synchronized void populate(ClassLoaderResolver clr, ClassLoader primary)
     {
         // Check the class that we're modelling exists
         try
@@ -108,33 +107,5 @@ public class ImplementsMetaData extends MetaData
         
         properties.add(pmd);
         pmd.parent = this;
-    }
-    
-    // ------------------------------ Utilities --------------------------------
-
-    /**
-     * Returns a string representation of the object.
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<implements name=\"" + name + "\">\n");
-
-        // Add properties
-        for (int i=0;i<properties.size();i++)
-        {
-            PropertyMetaData pmd = properties.get(i);
-            sb.append(pmd.toString(prefix + indent, indent));
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent, indent)); 
-
-        sb.append(prefix + "</implements>\n");
-        return sb.toString();
     }
 }

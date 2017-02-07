@@ -20,6 +20,7 @@ package org.datanucleus.metadata;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.datanucleus.exceptions.NucleusException;
 import org.datanucleus.exceptions.NucleusUserException;
@@ -187,45 +188,45 @@ public class MetaDataMerger
             }
             primaryCmd.queries.addAll(ormCmd.queries);
         }
-        if (!ormCmd.joins.isEmpty())
+        if (ormCmd.joins != null)
         {
-            primaryCmd.joins.clear();
+            primaryCmd.joins = null;
             Iterator iter = ormCmd.joins.iterator();
             while (iter.hasNext())
             {
                 primaryCmd.addJoin((JoinMetaData)iter.next());
             }
         }
-        if (!ormCmd.indexes.isEmpty())
+        if (ormCmd.indexes != null)
         {
-            primaryCmd.indexes.clear();
+            primaryCmd.indexes = null;
             Iterator iter = ormCmd.indexes.iterator();
             while (iter.hasNext())
             {
                 primaryCmd.addIndex((IndexMetaData)iter.next());
             }
         }
-        if (!ormCmd.foreignKeys.isEmpty())
+        if (ormCmd.foreignKeys != null)
         {
-            primaryCmd.foreignKeys.clear();
+            primaryCmd.foreignKeys = null;
             Iterator iter = ormCmd.foreignKeys.iterator();
             while (iter.hasNext())
             {
                 primaryCmd.addForeignKey((ForeignKeyMetaData)iter.next());
             }
         }
-        if (!ormCmd.uniqueConstraints.isEmpty())
+        if (ormCmd.uniqueConstraints != null)
         {
-            primaryCmd.uniqueConstraints.clear();
+            primaryCmd.uniqueConstraints = null;
             Iterator iter = ormCmd.uniqueConstraints.iterator();
             while (iter.hasNext())
             {
                 primaryCmd.addUniqueConstraint((UniqueMetaData)iter.next());
             }
         }
-        if (!ormCmd.fetchGroups.isEmpty())
+        if (ormCmd.fetchGroups != null)
         {
-            primaryCmd.fetchGroups.clear();
+            primaryCmd.fetchGroups = null;
             Iterator iter = ormCmd.fetchGroups.iterator();
             while (iter.hasNext())
             {
@@ -321,13 +322,10 @@ public class MetaDataMerger
         }
 
         // Add any extensions supplied in the ORM MetaData
-        ExtensionMetaData[] ormExtensions = ormCmd.getExtensions();
+        Map<String, String> ormExtensions = ormCmd.getExtensions();
         if (ormExtensions != null)
         {
-            for (int i=0;i<ormExtensions.length;i++)
-            {
-                primaryCmd.addExtension(ormExtensions[i].vendorName, ormExtensions[i].key, ormExtensions[i].value);
-            }
+            primaryCmd.addExtensions(ormExtensions);
         }
     }
 
@@ -478,27 +476,23 @@ public class MetaDataMerger
         }
 
         // Add any extensions supplied in the ORM file
-        ExtensionMetaData[] ormExtensions = ormFmd.getExtensions();
+        Map<String, String> ormExtensions = ormFmd.getExtensions();
         if (ormExtensions != null)
         {
-            for (int i=0;i<ormExtensions.length;i++)
-            {
-                primaryFmd.addExtension(ormExtensions[i].vendorName, ormExtensions[i].key, ormExtensions[i].value);
-            }
+            primaryFmd.addExtensions(ormExtensions);
         }
     }
 
     /**
-     * Method to take a class MetaData definition and merge in any Annotations "MetaData" definition.
-     * If something is specified in the MetaData and also in the annotations then the MetaData takes precedence.
+     * Method to take a class XML metadata definition and merge in any Annotations metadata definition.
+     * If something is specified in the XML and also in the annotations then the XML takes precedence.
      * This is tied pretty intrinsically to the AbstractClassMetaData class and so could have been included there.
-     * @param primaryCmd The MetaData definition (to be updated)
-     * @param annotCmd The annotations Class definition (to be merged into the MetaData definition)
+     * @param primaryCmd The XML metadata definition (to be updated)
+     * @param annotCmd The annotations metadata definition (to be merged into the XML definition)
      * @param mmgr MetaData manager
      * @throws NucleusException if an error occurs while merging the annotations info
      */
-    public static void mergeClassAnnotationsData(AbstractClassMetaData primaryCmd, 
-            AbstractClassMetaData annotCmd, MetaDataManager mmgr)
+    public static void mergeClassAnnotationsData(AbstractClassMetaData primaryCmd, AbstractClassMetaData annotCmd, MetaDataManager mmgr)
     {
         if (annotCmd == null || primaryCmd == null)
         {
@@ -537,7 +531,7 @@ public class MetaDataMerger
             }
         }
 
-        // Merge the attributes where they arent set on the primary and are on the annotations
+        // Merge the attributes where they aren't set on the XML and are on the annotations
         // A). Simple attributes
         if (primaryCmd.entityName == null && annotCmd.entityName != null)
         {
@@ -596,7 +590,7 @@ public class MetaDataMerger
         }
         if (primaryCmd.listeners == null && annotCmd.listeners != null)
         {
-            // No MetaData listeners so just use those of the annotations
+            // No XML listeners so just use those of the annotations
             Iterator iter = annotCmd.listeners.iterator();
             while (iter.hasNext())
             {
@@ -605,8 +599,7 @@ public class MetaDataMerger
         }
         else if (primaryCmd.listeners != null && annotCmd.listeners != null)
         {
-            // We have listeners in MetaData and also in Annotations. Listeners can be for the actual class, or for
-            // any EntityListener, so use overriding in those two groups
+            // We have listeners in XML and also in Annotations. Listeners can be for the actual class, or for any EntityListener, so use overriding in those two groups
             if (primaryCmd.getListenerForClass(primaryCmd.getFullClassName()) == null)
             {
                 // Primary has just Listeners and no callbacks
@@ -616,10 +609,9 @@ public class MetaDataMerger
                     primaryCmd.addListener(annotCmd.getListenerForClass(primaryCmd.getFullClassName()));
                 }
             }
-            else if (primaryCmd.getListenerForClass(primaryCmd.getFullClassName()) != null && 
-                primaryCmd.getListeners().size() == 1)
+            else if (primaryCmd.getListenerForClass(primaryCmd.getFullClassName()) != null && primaryCmd.getListeners().size() == 1)
             {
-                // Primary has just callbacks and no listeners so take any listeners from annotations
+                // XML has just callbacks and no listeners so take any listeners from annotations
                 List annotListeners = annotCmd.getListeners();
                 Iterator annotIter = annotListeners.iterator();
                 while (annotIter.hasNext())
@@ -650,7 +642,7 @@ public class MetaDataMerger
                 primaryCmd.addQuery((QueryMetaData)iter.next());
             }
         }
-        if (primaryCmd.joins.isEmpty() && !annotCmd.joins.isEmpty())
+        if (primaryCmd.joins == null && annotCmd.joins != null)
         {
             Iterator iter = annotCmd.joins.iterator();
             while (iter.hasNext())
@@ -658,7 +650,7 @@ public class MetaDataMerger
                 primaryCmd.addJoin((JoinMetaData)iter.next());
             }
         }
-        if (primaryCmd.indexes.isEmpty() && !annotCmd.indexes.isEmpty())
+        if (primaryCmd.indexes == null && annotCmd.indexes != null)
         {
             Iterator iter = annotCmd.indexes.iterator();
             while (iter.hasNext())
@@ -666,7 +658,7 @@ public class MetaDataMerger
                 primaryCmd.addIndex((IndexMetaData)iter.next());
             }
         }
-        if (primaryCmd.foreignKeys.isEmpty() && !annotCmd.foreignKeys.isEmpty())
+        if (primaryCmd.foreignKeys == null && annotCmd.foreignKeys != null)
         {
             Iterator iter = annotCmd.foreignKeys.iterator();
             while (iter.hasNext())
@@ -674,7 +666,7 @@ public class MetaDataMerger
                 primaryCmd.addForeignKey((ForeignKeyMetaData)iter.next());
             }
         }
-        if (primaryCmd.uniqueConstraints.isEmpty() && !annotCmd.uniqueConstraints.isEmpty())
+        if (primaryCmd.uniqueConstraints == null && annotCmd.uniqueConstraints != null)
         {
             Iterator iter = annotCmd.uniqueConstraints.iterator();
             while (iter.hasNext())
@@ -682,7 +674,7 @@ public class MetaDataMerger
                 primaryCmd.addUniqueConstraint((UniqueMetaData)iter.next());
             }
         }
-        if (primaryCmd.fetchGroups.isEmpty() && !annotCmd.fetchGroups.isEmpty())
+        if (primaryCmd.fetchGroups == null && annotCmd.fetchGroups != null)
         {
             Iterator iter = annotCmd.fetchGroups.iterator();
             while (iter.hasNext())
@@ -698,11 +690,11 @@ public class MetaDataMerger
             AbstractMemberMetaData primaryFmd = primaryCmd.getMetaDataForMember(annotFmd.getName());
             if (primaryFmd == null)
             {
-                // Field not specified in MetaData but is in Annotations
+                // Field not specified in XML but is in Annotations
                 AbstractMemberMetaData fmd = null;
                 if (annotFmd.className != null)
                 {
-                    // Overridden field for superclass that we have no MetaData field for
+                    // Overridden field for superclass that we have no XML field for
                     // Copy the fmd for the actual class (if any).
                     // TODO Replace this with a copy of the metadata version of the field if available
                     AbstractMemberMetaData baseFmd = mmgr.readMetaDataForMember(annotFmd.className, annotFmd.name);
@@ -744,7 +736,7 @@ public class MetaDataMerger
                 }
                 else
                 {
-                    // Create a copy of the Annotations "MetaData" and add
+                    // Create a copy of the Annotations metadata and add
                     if (annotFmd instanceof FieldMetaData)
                     {
                         // Annotation definition of the field
@@ -768,21 +760,18 @@ public class MetaDataMerger
         }
 
         // Add any extensions supplied in the annotations
-        ExtensionMetaData[] ormExtensions = annotCmd.getExtensions();
+        Map<String, String> ormExtensions = annotCmd.getExtensions();
         if (ormExtensions != null)
         {
-            for (int i=0;i<ormExtensions.length;i++)
-            {
-                primaryCmd.addExtension(ormExtensions[i].vendorName, ormExtensions[i].key, ormExtensions[i].value);
-            }
+            primaryCmd.addExtensions(ormExtensions);
         }
     }
 
     /**
-     * Method to take a field/property MetaData definition and merge in the Annotations "MetaData" definition.
+     * Method to take a field/property XML metadata definition and merge in the Annotations metadata definition.
      * This is tied pretty intrinsically to the AbstractMemberMetaData class and so could have been included there.
-     * @param primaryFmd The MetaData Field definition (to be updated)
-     * @param annotFmd The Annotations "MetaData" Field definition (to be merged into the MetaData definition)
+     * @param primaryFmd The XML metadata Field definition (to be updated)
+     * @param annotFmd The Annotations metadata Field definition (to be merged into the XML definition)
      * @throws NucleusException if an error occurs while merging the annotation info
      */
     static void mergeMemberAnnotationsData(AbstractMemberMetaData primaryFmd, AbstractMemberMetaData annotFmd)
@@ -930,7 +919,7 @@ public class MetaDataMerger
 
         if (primaryFmd.columns.isEmpty() && !annotFmd.columns.isEmpty())
         {
-            // Columns specified in annotations but not in MetaData
+            // Columns specified in annotations but not in XML
             ColumnMetaData[] annotColumns = annotFmd.getColumnMetaData();
             if (annotColumns != null)
             {
@@ -942,13 +931,10 @@ public class MetaDataMerger
         }
 
         // Add any extensions supplied in the annotations
-        ExtensionMetaData[] annotExtensions = annotFmd.getExtensions();
+        Map<String, String> annotExtensions = annotFmd.getExtensions();
         if (annotExtensions != null)
         {
-            for (int i=0;i<annotExtensions.length;i++)
-            {
-                primaryFmd.addExtension(annotExtensions[i].vendorName, annotExtensions[i].key, annotExtensions[i].value);
-            }
+            primaryFmd.addExtensions(annotExtensions);
         }
     }
 }

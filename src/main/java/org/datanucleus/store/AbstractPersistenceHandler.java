@@ -17,14 +17,20 @@ Contributors:
 **********************************************************************/
 package org.datanucleus.store;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.datanucleus.ExecutionContext;
 import org.datanucleus.PropertyNames;
 import org.datanucleus.exceptions.DatastoreReadOnlyException;
 import org.datanucleus.exceptions.NucleusDataStoreException;
 import org.datanucleus.exceptions.NucleusObjectNotFoundException;
+import org.datanucleus.exceptions.NucleusUserException;
 import org.datanucleus.metadata.AbstractClassMetaData;
 import org.datanucleus.metadata.MetaData;
 import org.datanucleus.state.ObjectProvider;
+import org.datanucleus.store.query.Query;
 import org.datanucleus.util.Localiser;
 import org.datanucleus.util.NucleusLogger;
 import org.datanucleus.util.StringUtils;
@@ -132,9 +138,44 @@ public abstract class AbstractPersistenceHandler implements StorePersistenceHand
         return objects;
     }
 
+    /* (non-Javadoc)
+     * @see org.datanucleus.store.StorePersistenceHandler#findObjectForKeys(org.datanucleus.ExecutionContext, org.datanucleus.metadata.AbstractClassMetaData, java.lang.String[], java.lang.Object[])
+     */
+    @Override
+    public Object findObjectForKeys(ExecutionContext ec, AbstractClassMetaData cmd, String[] memberNames, Object[] values)
+    {
+        if (memberNames.length != values.length)
+        {
+            throw new NucleusUserException("findObjectForKeys should have same number of member names and values");
+        }
+
+        // Fallback to using a simple JDOQL query (which is what would be performed for the majority of datastores anyway)
+        StringBuilder jdoqlStr = new StringBuilder("SELECT FROM ").append(cmd.getFullClassName()).append(" WHERE ");
+        Map<String, Object> paramValueMap = new HashMap<>();
+        for (int i=0;i<memberNames.length;i++)
+        {
+            jdoqlStr.append("this.").append(memberNames[i]).append("=:val").append(i);
+            paramValueMap.put("val" + i, values[i]);
+            if (i != memberNames.length-1)
+            {
+                jdoqlStr.append(" AND ");
+            }
+        }
+        Query q = storeMgr.getQueryManager().newQuery("JDOQL", ec, jdoqlStr.toString());
+        List results = (List)q.executeWithMap(paramValueMap);
+        if (results == null || results.size() == 0)
+        {
+            throw new NucleusObjectNotFoundException("No object found for specified members and values of type " + cmd.getFullClassName());
+        }
+        else if (results.size() == 1)
+        {
+            return results.get(0);
+        }
+        throw new NucleusUserException("Specified members for class " + cmd.getFullClassName() + " finds multiple objects!");
+    }
+
     /**
-     * Convenience method to assert when this StoreManager is read-only and the specified object
-     * is attempting to be updated.
+     * Convenience method to assert when this StoreManager is read-only and the specified object is attempting to be updated.
      * @param op ObjectProvider for the object
      */
     public void assertReadOnlyForUpdateOfObject(ObjectProvider op)

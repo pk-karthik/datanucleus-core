@@ -31,38 +31,42 @@ import org.datanucleus.util.NucleusLogger;
 
 /**
  * Parser for handling JPQL Single-String queries.
- * Takes a JPQLQuery and the query string and parses it into its constituent parts, updating
- * the JPQLQuery accordingly with the result that after calling the parse() method the JPQLQuery
- * is populated.
+ * Takes a JPQLQuery and the query string and parses it into its constituent parts, updating the JPQLQuery accordingly with the result that, 
+ * after calling the parse() method, the JPQLQuery is populated.
  * <pre>
- * SELECT [ {result} ]
- *        [FROM {candidate-classes} ]
+ * SELECT [{result} ]
+ *        [FROM {from-clause} ]
  *        [WHERE {filter}]
  *        [GROUP BY {grouping-clause} ]
  *        [HAVING {having-clause} ]
  *        [ORDER BY {ordering-clause}]
+ *        [RANGE x,y]
  * e.g SELECT c FROM Customer c INNER JOIN c.orders o WHERE c.status = 1
  * </pre>
  * or
  * <pre>
  * UPDATE {update-clause}
  * WHERE {filter}
- * and update-clause is of the form
- * "Entity [[AS] identifier] SET {field = new_value}, ..."
  * </pre>
+ * and <i>update-clause</i> is of the form "Entity [[AS] identifier] SET {field = new_value}, ..."
  * or
  * <pre>
  * DELETE {delete-clause}
  * WHERE {filter}
- * and delete-clause is of the form
- * "FROM Entity [[AS] identifier]"
  * </pre>
+ * and <i>delete-clause</i> is of the form "FROM Entity [[AS] identifier]"
  * <p>
- * Note that {filter} and {having-clause} can contain subqueries in JPQL, hence containing keywords
+ * Note that only the {filter} and {having-clause} can strictly contain subqueries in JPQL, hence containing keywords
  * <pre>
  * SELECT c FROM Customer c WHERE NOT EXISTS (SELECT o1 FROM c.orders o1)
  * </pre>
- * So the "filter" for the outer query is "NOT EXISTS (SELECT o1 FROM c.orders o1)"
+ * So the "filter" for the outer query is "NOT EXISTS (SELECT o1 FROM c.orders o1)".
+ * Note also that we allow subqueries in {result}, {from}, and {having} clauses as well (vendor extension).
+ * If a subquery is contained we extract the subquery and then set it as a variable in the symbol table, and add the subquery separately.
+ * Note that the <pre>[RANGE x,y]</pre> is a DataNucleus extension syntax to allow for specification of firstResult/maxResults in the query string and hence in subqueries
+ * and is dependent on enabling <i>datanucleus.query.jpql.allowRange</i>.
+ *
+ * TODO Need to better cater for the construct "TRIM(... FROM ...)" since it reuses the FROM keyword and we don't handle that explicitly here, just working around it
  */
 public class JPQLSingleStringParser
 {
@@ -71,6 +75,9 @@ public class JPQLSingleStringParser
 
     /** The single-string query string. */
     private String queryString;
+
+    /** Standard JPQL does not allow RANGE keyword in the JPQL. */
+    private boolean allowRange = false;
 
     /**
      * Constructor for the Single-String parser.
@@ -87,12 +94,18 @@ public class JPQLSingleStringParser
         this.queryString = queryString;
     }
 
+    public JPQLSingleStringParser allowRange()
+    {
+        allowRange = true;
+        return this;
+    }
+
     /**
      * Method to parse the Single-String query
      */
     public void parse()
     {
-        new Compiler(new Parser(queryString)).compile();
+        new Compiler(new Parser(queryString, allowRange)).compile();
     }
 
     /**
@@ -216,7 +229,7 @@ public class JPQLSingleStringParser
             }
             else
             {
-                // SELECT a, b, c FROM ... WHERE ... GROUP BY ... HAVING ... ORDER BY ...
+                // SELECT a, b, c FROM ... WHERE ... GROUP BY ... HAVING ... ORDER BY ... [RANGE ...]
                 compileResult();
 
                 if (parser.parseKeywordIgnoreCase("FROM"))
@@ -239,12 +252,17 @@ public class JPQLSingleStringParser
                 {
                     compileOrder();
                 }
+                if (allowRange && parser.parseKeywordIgnoreCase("RANGE"))
+                {
+                    // DN extension
+                    compileRange();
+                }
             }
         }
 
         private void compileResult()
         {
-            String content = parser.parseContent(null, true);
+            String content = parser.parseContent(null, true); // Allow subqueries (see below also search for SELECT), and "TRIM(... FROM ...)"
             if (content.length() == 0)
             {
                 // content cannot be empty
@@ -265,38 +283,62 @@ public class JPQLSingleStringParser
 
         private void compileUpdate()
         {
-            String content = parser.parseContent(null, false);
+            String content = parser.parseContent(null, true); // Allow subqueries (see below also search for SELECT), and "TRIM(... FROM ...)"
             if (content.length() == 0)
             {
                 // No UPDATE clause
                 throw new NucleusUserException(Localiser.msg("043010"));
             }
 
-            String contentUpper = content.toUpperCase();
-            int setIndex = contentUpper.indexOf("SET");
-            if (setIndex < 0)
+            if (content.toUpperCase().indexOf("SELECT ") > 0) // Case insensitive search
             {
-                // UPDATE clause has no "SET ..." !
-                throw new NucleusUserException(Localiser.msg("043011"));
+                // Subquery (or subqueries) present so split them out and just apply the filter for this query
+                String substitutedContent = processContentWithSubqueries(content);
+                String contentUpper = substitutedContent.toUpperCase();
+                int setIndex = contentUpper.indexOf("SET");
+                if (setIndex < 0)
+                {
+                    // UPDATE clause has no "SET ..." !
+                    throw new NucleusUserException(Localiser.msg("043011"));
+                }
+                query.setFrom(substitutedContent.substring(0, setIndex).trim());
+                query.setUpdate(substitutedContent.substring(setIndex+3).trim());
             }
-            query.setFrom(content.substring(0, setIndex).trim());
-            query.setUpdate(content.substring(setIndex+3).trim());
+            else
+            {
+                String contentUpper = content.toUpperCase();
+                int setIndex = contentUpper.indexOf("SET");
+                if (setIndex < 0)
+                {
+                    // UPDATE clause has no "SET ..." !
+                    throw new NucleusUserException(Localiser.msg("043011"));
+                }
+                query.setFrom(content.substring(0, setIndex).trim());
+                query.setUpdate(content.substring(setIndex+3).trim());
+            }
         }
 
         private void compileFrom()
         {
-            String content = parser.parseContent(null, false);
+            String content = parser.parseContent(null, true); // Allow subqueries (see below also search for SELECT), and "TRIM(... FROM ...)"
             if (content.length() > 0)
             {
-                //content may be empty
-                query.setFrom(content);
+                if (content.toUpperCase().indexOf("SELECT ") > 0) // Case insensitive search
+                {
+                    // Subquery (or subqueries) present so split them out and just apply the filter for this query
+                    String substitutedContent = processContentWithSubqueries(content);
+                    query.setFrom(substitutedContent);
+                }
+                else
+                {
+                    query.setFrom(content);
+                }
             }
         }
 
         private void compileWhere()
         {
-            // "TRIM" may include "FROM" keyword so ignore subsequent FROMs
-            String content = parser.parseContent("FROM", true);
+            String content = parser.parseContent("FROM", true); // Allow subqueries (see below also search for SELECT), and "TRIM(... FROM ...)"
             if (content.length() == 0)
             {
                 // content cannot be empty
@@ -317,19 +359,28 @@ public class JPQLSingleStringParser
 
         private void compileGroup()
         {
-            String content = parser.parseContent(null, false);
+            String content = parser.parseContent("FROM", true); // Allow subqueries (see below also search for SELECT), and "TRIM(... FROM ...)"
             if (content.length() == 0)
             {
                 // content cannot be empty
                 throw new NucleusUserException(Localiser.msg("043004", "GROUP BY", "<grouping>"));
             }
-            query.setGrouping(content);
+
+            if (content.toUpperCase().indexOf("SELECT ") > 0) // Case insensitive search
+            {
+                // Subquery (or subqueries) present so split them out and just apply the grouping for this query
+                String substitutedContent = processContentWithSubqueries(content);
+                query.setGrouping(substitutedContent);
+            }
+            else
+            {
+                query.setGrouping(content);
+            }
         }
 
         private void compileHaving()
         {
-            // "TRIM" may include "FROM" keyword so ignore subsequent FROMs
-            String content = parser.parseContent("FROM", true);
+            String content = parser.parseContent("FROM", true); // Allow subqueries (see below also search for SELECT), and "TRIM(... FROM ...)"
             if (content.length() == 0)
             {
                 // content cannot be empty
@@ -350,13 +401,34 @@ public class JPQLSingleStringParser
 
         private void compileOrder()
         {
+            String content = parser.parseContent("FROM", true); // Allow subqueries (see below also search for SELECT), and "TRIM(... FROM ...)"
+            if (content.length() == 0)
+            {
+                // content cannot be empty
+                throw new NucleusUserException(Localiser.msg("043004", "ORDER", "<ordering>"));
+            }
+
+            if (content.toUpperCase().indexOf("SELECT ") > 0)
+            {
+                // Subquery (or subqueries) present so split them out and just apply the having for this query
+                String substitutedContent = processContentWithSubqueries(content);
+                query.setOrdering(substitutedContent);
+            }
+            else
+            {
+                query.setOrdering(content);
+            }
+        }
+
+        private void compileRange()
+        {
             String content = parser.parseContent(null, false);
             if (content.length() == 0)
             {
                 // content cannot be empty
-                throw new NucleusUserException(Localiser.msg("043004", "ORDER BY", "<ordering>"));
+                throw new NucleusUserException(Localiser.msg("042014", "RANGE", "<range>"));
             }
-            query.setOrdering(content);
+            query.setRange(content);
         }
 
         /**
@@ -470,12 +542,15 @@ public class JPQLSingleStringParser
         /** current token cursor position */
         int tokenIndex = -1;
 
+        boolean allowRange = false;
+
         /**
          * Constructor
          * @param str Query string
          */
-        public Parser(String str)
+        public Parser(String str, boolean allowRange)
         {
+            this.allowRange = allowRange;
             queryString = str.replace('\n', ' ');
 
             // Parse into tokens, taking care to keep any String literals together
@@ -528,11 +603,11 @@ public class JPQLSingleStringParser
             keywords = new String[tokenList.size()];
             for (i = 0; i < tokens.length; i++)
             {
-                if (JPQLQueryHelper.isKeyword(tokens[i]))
+                if (JPQLQueryHelper.isKeyword(tokens[i], allowRange))
                 {
                     keywords[i] = tokens[i];
                 }
-                else if (i < tokens.length - 1 && JPQLQueryHelper.isKeyword(tokens[i] + ' ' + tokens[i + 1]))
+                else if (i < tokens.length - 1 && JPQLQueryHelper.isKeyword(tokens[i] + ' ' + tokens[i + 1], allowRange))
                 {
                     keywords[i] = tokens[i];
                     i++;
@@ -578,13 +653,13 @@ public class JPQLSingleStringParser
                     }
                 }
 
-                if (level == 0 && JPQLQueryHelper.isKeyword(tokens[tokenIndex]) && !tokens[tokenIndex].equals(keywordToIgnore))
+                if (level == 0 && JPQLQueryHelper.isKeyword(tokens[tokenIndex], allowRange) && !tokens[tokenIndex].equals(keywordToIgnore))
                 {
                     // Invalid keyword encountered and not currently in subquery block
                     tokenIndex--;
                     break;
                 }
-                else if (level == 0 && tokenIndex < tokens.length - 1 && JPQLQueryHelper.isKeyword(tokens[tokenIndex] + ' ' + tokens[tokenIndex + 1]))
+                else if (level == 0 && tokenIndex < tokens.length - 1 && JPQLQueryHelper.isKeyword(tokens[tokenIndex] + ' ' + tokens[tokenIndex + 1], allowRange))
                 {
                     // Invalid keyword entered ("GROUP BY", "ORDER BY") and not currently in subquery block
                     tokenIndex--;
@@ -647,8 +722,7 @@ public class JPQLSingleStringParser
         }
 
         /**
-         * Parse the next token looking for a keyword. The cursor position is
-         * skipped in one tick if a keyword is found
+         * Parse the next token looking for a keyword. The cursor position is skipped in one tick if a keyword is found
          * @return the parsed keyword or null
          */
         public String parseKeyword()

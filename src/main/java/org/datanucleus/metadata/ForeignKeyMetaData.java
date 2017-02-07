@@ -108,7 +108,7 @@ public class ForeignKeyMetaData extends ConstraintMetaData
     {
         if (columns == null)
         {
-            columns = new ArrayList<ColumnMetaData>();
+            columns = new ArrayList<>();
         }
         columns.add(colmd);
         addColumn(colmd.getName());
@@ -128,11 +128,7 @@ public class ForeignKeyMetaData extends ConstraintMetaData
 
     public final ColumnMetaData[] getColumnMetaData()
     {
-        if (columns == null)
-        {
-            return null;
-        }
-        return columns.toArray(new ColumnMetaData[columns.size()]);
+        return (columns == null) ? null : columns.toArray(new ColumnMetaData[columns.size()]);
     }
 
     public final boolean isDeferred()
@@ -221,65 +217,5 @@ public class ForeignKeyMetaData extends ConstraintMetaData
     public boolean getFkDefinitionApplies()
     {
         return this.fkDefinitionApplies;
-    }
-
-    // ---------------------------- Utilities ----------------------------------
-
-    /**
-     * Returns a string representation of the object using a prefix
-     * This can be used as part of a facility to output a MetaData file. 
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        if (!StringUtils.isWhitespace(fkDefinition))
-        {
-            return "<foreign-key name=\"" + name + "\" definition=\"" + fkDefinition + "\" definition-applies="+ fkDefinitionApplies + "/>";
-        }
-
-        // Field needs outputting so generate metadata
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<foreign-key deferred=\"" + deferred + "\"\n");
-        sb.append(prefix).append("       unique=\"" + unique + "\"");
-        if (updateAction != null)
-        {
-            sb.append("\n").append(prefix).append("       update-action=\"" + updateAction + "\"");
-        }
-        if (deleteAction != null)
-        {
-            sb.append("\n").append(prefix).append("       delete-action=\"" + deleteAction + "\"");
-        }
-        if (table != null)
-        {
-            sb.append("\n").append(prefix).append("       table=\"" + table + "\"");
-        }
-        if (name != null)
-        {
-            sb.append("\n").append(prefix).append("       name=\"" + name + "\"");
-        }
-        sb.append(">\n");
-
-        if (memberNames != null)
-        {
-            for (String memberName : memberNames)
-            {
-                sb.append(prefix).append(indent).append("<field name=\"" + memberName + "\"/>");
-            }
-        }
-        if (columns != null)
-        {
-            for (ColumnMetaData colmd : columns)
-            {
-                sb.append(colmd.toString(prefix + indent,indent));
-            }
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</foreign-key>\n");
-        return sb.toString();
     }
 }

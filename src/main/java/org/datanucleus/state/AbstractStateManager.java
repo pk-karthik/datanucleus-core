@@ -24,6 +24,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.datanucleus.ExecutionContext;
 import org.datanucleus.FetchPlanForClass;
+import org.datanucleus.FetchPlanState;
 import org.datanucleus.PropertyNames;
 import org.datanucleus.cache.CachedPC;
 import org.datanucleus.cache.L2CachePopulateFieldManager;
@@ -1323,6 +1324,7 @@ public abstract class AbstractStateManager<T> implements ObjectProvider<T>
         }
         else
         {
+            // TODO When we have nested embedded objects that can have relations to non-embedded then this needs to change
             throw new NucleusUserException("Cannot unload field/property of embedded object");
         }
     }

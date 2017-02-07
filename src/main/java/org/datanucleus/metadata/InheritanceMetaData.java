@@ -27,6 +27,10 @@ public class InheritanceMetaData extends MetaData
 {
     private static final long serialVersionUID = -3645685751605920718L;
 
+    public static final String INHERITANCE_TREE_STRATEGY_JOINED = "JOINED";
+    public static final String INHERITANCE_TREE_STRATEGY_TABLE_PER_CLASS = "TABLE_PER_CLASS";
+    public static final String INHERITANCE_TREE_STRATEGY_SINGLE_TABLE = "SINGLE_TABLE";
+
     /** strategy tag value. */
     protected InheritanceStrategy strategy = null;
 
@@ -49,16 +53,17 @@ public class InheritanceMetaData extends MetaData
     /**
      * Method to initialise the object, creating internal convenience arrays.
      * Initialises all sub-objects.
+     * @param clr Not used
      */
-    public void initialise(ClassLoaderResolver clr, MetaDataManager mmgr)
+    public void initialise(ClassLoaderResolver clr)
     {
         if (joinMetaData != null)
         {
-            joinMetaData.initialise(clr, mmgr);
+            joinMetaData.initialise(clr);
         }
         if (discriminatorMetaData != null)
         {
-            discriminatorMetaData.initialise(clr, mmgr);
+            discriminatorMetaData.initialise(clr);
         }
 
         setInitialised();
@@ -137,38 +142,5 @@ public class InheritanceMetaData extends MetaData
         DiscriminatorMetaData dismd = new DiscriminatorMetaData();
         setDiscriminatorMetaData(dismd);
         return dismd;
-    }
-
-    // ----------------------------- Utilities ---------------------------------
-
-    /**
-     * Returns a string representation of the object using a prefix
-     * @param prefix prefix string
-     * @param indent indent string
-     * @return a string representation of the object.
-     */
-    public String toString(String prefix,String indent)
-    {
-        StringBuilder sb = new StringBuilder();
-        sb.append(prefix).append("<inheritance strategy=\"" + strategy + "\">\n");
-
-        // Add join
-        if (joinMetaData != null)
-        {
-            sb.append(joinMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add discriminator
-        if (discriminatorMetaData != null)
-        {
-            sb.append(discriminatorMetaData.toString(prefix + indent,indent));
-        }
-
-        // Add extensions
-        sb.append(super.toString(prefix + indent,indent));
-
-        sb.append(prefix).append("</inheritance>\n");
-
-        return sb.toString();
     }
 }

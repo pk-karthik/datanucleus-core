@@ -30,7 +30,6 @@ import org.datanucleus.metadata.AbstractMemberMetaData;
 import org.datanucleus.metadata.CollectionMetaData;
 import org.datanucleus.metadata.ContainerMetaData;
 import org.datanucleus.metadata.FieldPersistenceModifier;
-import org.datanucleus.metadata.MetaDataManager;
 import org.datanucleus.metadata.OrderMetaData;
 import org.datanucleus.state.ObjectProvider;
 import org.datanucleus.store.types.ElementContainerAdapter;
@@ -53,7 +52,7 @@ public abstract class CollectionHandler<C extends Object> extends ElementContain
     }
 
     @Override
-    public void populateMetaData(ClassLoaderResolver clr, ClassLoader primary, MetaDataManager mmgr, AbstractMemberMetaData mmd)
+    public void populateMetaData(ClassLoaderResolver clr, ClassLoader primary, AbstractMemberMetaData mmd)
     {
         // Assert correct type of metadata has been defined
         CollectionMetaData collectionMetadata = assertValidType(mmd.getContainer());
@@ -76,7 +75,7 @@ public abstract class CollectionHandler<C extends Object> extends ElementContain
 
         if (mmd.getElementMetaData() != null)
         {
-            mmd.getElementMetaData().populate(clr, primary, mmgr);
+            mmd.getElementMetaData().populate(clr, primary);
         }
 
         if (mmd.getPersistenceModifier() == FieldPersistenceModifier.PERSISTENT)
@@ -87,7 +86,7 @@ public abstract class CollectionHandler<C extends Object> extends ElementContain
                 collectionMetadata.setDependentElement(true);
             }
             
-            collectionMetadata.populate(clr, primary, mmgr);
+            collectionMetadata.populate(clr, primary);
         }
     }
 
@@ -110,23 +109,16 @@ public abstract class CollectionHandler<C extends Object> extends ElementContain
     }
 
     @Override
-    public boolean isDefaultFetchGroup(ClassLoaderResolver clr, MetaDataManager mmgr, AbstractMemberMetaData mmd)
+    public boolean isDefaultFetchGroup(ClassLoaderResolver clr, TypeManager typeMgr, AbstractMemberMetaData mmd)
     {
         if (!mmd.getCollection().isPopulated())
         {
             // Require mmd to be populated since it will have the element type validated and adjusted if necessary
             throw new NucleusException("MetaData must be populated in order to be able to determine default fetch group.");
         }
-        
-        String elementTypeName = mmd.getCollection().getElementType();
-
-        Class elementType = clr.classForName(elementTypeName);
 
         // Try to find using generic type specialisation
-
-        TypeManager typeMgr = mmgr.getNucleusContext().getTypeManager();
-
-        return typeMgr.isDefaultFetchGroupForCollection(mmd.getType(), elementType);
+        return typeMgr.isDefaultFetchGroupForCollection(mmd.getType(), clr.classForName(mmd.getCollection().getElementType()));
     }
 
     protected String getElementType(AbstractMemberMetaData mmd)

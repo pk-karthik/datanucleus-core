@@ -23,6 +23,7 @@ import java.util.Map;
 import org.datanucleus.ClassLoaderResolver;
 import org.datanucleus.ExecutionContext;
 import org.datanucleus.enhancement.Persistable;
+import org.datanucleus.enhancement.StateManager;
 import org.datanucleus.exceptions.NucleusException;
 import org.datanucleus.metadata.AbstractClassMetaData;
 import org.datanucleus.metadata.MetaDataManager;
@@ -54,6 +55,13 @@ public interface ApiAdapter extends Serializable
      * @return Whether it is managed
      */
     boolean isManaged(Object pc);
+
+    /**
+     * Accessor for the state manager for the object.
+     * @param pc The object
+     * @return The StateManager managing this object
+     */
+    StateManager getStateManager(Object pc);
 
     /**
      * Method to return the ExecutionContext (if any) associated with the passed object.

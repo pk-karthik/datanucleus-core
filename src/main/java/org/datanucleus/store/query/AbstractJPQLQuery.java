@@ -21,6 +21,7 @@ import java.util.Iterator;
 import java.util.Map;
 
 import org.datanucleus.ExecutionContext;
+import org.datanucleus.PropertyNames;
 import org.datanucleus.exceptions.NucleusUserException;
 import org.datanucleus.metadata.AbstractClassMetaData;
 import org.datanucleus.query.JPQLSingleStringParser;
@@ -31,6 +32,7 @@ import org.datanucleus.query.compiler.QueryCompilation;
 import org.datanucleus.store.StoreManager;
 import org.datanucleus.util.Localiser;
 import org.datanucleus.util.NucleusLogger;
+import org.datanucleus.util.StringUtils;
 
 /**
  * Abstract representation of a JPQL query used by DataNucleus.
@@ -107,7 +109,13 @@ public abstract class AbstractJPQLQuery extends AbstractJavaQuery
     {
         super(storeMgr, ec);
 
-        new JPQLSingleStringParser(this, query).parse();
+        JPQLSingleStringParser parser = new JPQLSingleStringParser(this, query);
+        if (ec.getBooleanProperty(PropertyNames.PROPERTY_QUERY_JPQL_ALLOW_RANGE))
+        {
+            // Allow RANGE to be used in the JPQL
+            parser.allowRange();
+        }
+        parser.parse();
     }
 
     /**
@@ -191,12 +199,18 @@ public abstract class AbstractJPQLQuery extends AbstractJavaQuery
         else if (type == QueryType.BULK_UPDATE)
         {
             str.append("UPDATE ").append(from).append(" SET ").append(update).append(' ');
-            str.append("WHERE ").append(dereferenceFilter(filter));
+            if (!StringUtils.isWhitespace(filter))
+            {
+                str.append("WHERE ").append(dereferenceFilter(filter));
+            }
         }
         else if (type == QueryType.BULK_DELETE)
         {
             str.append("DELETE FROM ").append(from).append(' ');
-            str.append("WHERE ").append(dereferenceFilter(filter));
+            if (!StringUtils.isWhitespace(filter))
+            {
+                str.append("WHERE ").append(dereferenceFilter(filter));
+            }
         }
         else
         {
@@ -285,7 +299,7 @@ public abstract class AbstractJPQLQuery extends AbstractJavaQuery
             this.filter, getParsedImports(), this.ordering, this.result, this.grouping, this.having, explicitParameters, update);
         if (getBooleanExtensionProperty(EXTENSION_JPQL_STRICT, false))
         {
-            compiler.setOption("jpql.strict", "true");
+            compiler.setOption(EXTENSION_JPQL_STRICT, "true");
         }
         compilation = compiler.compile(parameterValues, subqueries);
         if (QueryUtils.queryReturnsSingleRow(this))
@@ -378,15 +392,14 @@ public abstract class AbstractJPQLQuery extends AbstractJavaQuery
                 subquery.filter, getParsedImports(), subquery.ordering, subquery.result, subquery.grouping, subquery.having, null, null);
             if (getBooleanExtensionProperty(EXTENSION_JPQL_STRICT, false))
             {
-                subCompiler.setOption("jpql.strict", "true");
+                subCompiler.setOption(EXTENSION_JPQL_STRICT, "true");
             }
             subCompiler.setLinkToParentQuery(parentCompiler, null);
             QueryCompilation subqueryCompilation = subCompiler.compile(parameterValues, subquery.subqueries);
             parentCompilation.addSubqueryCompilation(entry.getKey(), subqueryCompilation);
             if (NucleusLogger.QUERY.isDebugEnabled())
             {
-                NucleusLogger.QUERY.debug(Localiser.msg("021045", getLanguage(), 
-                    "" + (System.currentTimeMillis() - startTime)));
+                NucleusLogger.QUERY.debug(Localiser.msg("021045", getLanguage(), "" + (System.currentTimeMillis() - startTime)));
             }
 
             if (subquery.subqueries != null) 

@@ -85,11 +85,15 @@ public class CompleteClassTable implements Table
 
     Column multitenancyColumn;
 
+    Column softDeleteColumn;
+
+    // TODO Support create-timestamp surrogate
+    // TODO Support update-timestamp surrogate
     /** Map of member-column mapping, keyed by the metadata for the member. */
-    Map<AbstractMemberMetaData, MemberColumnMapping> mappingByMember = new HashMap<AbstractMemberMetaData, MemberColumnMapping>();
+    Map<String, MemberColumnMapping> mappingByMember = new HashMap<>();
 
     /** Map of member-column mapping, keyed by the navigated path of embedded members. */
-    Map<String, MemberColumnMapping> mappingByEmbeddedMember = new HashMap<String, MemberColumnMapping>();
+    Map<String, MemberColumnMapping> mappingByEmbeddedMember = new HashMap<>();
 
     /** Map of DatastoreColumn, keyed by the column identifier. */
     Map<String, Column> columnByName = new HashMap<String, Column>();
@@ -134,10 +138,11 @@ public class CompleteClassTable implements Table
                 continue;
             }
 
+            // TODO Make use of cmd.overriddenMembers
             RelationType relationType = mmd.getRelationType(clr);
             if (relationType != RelationType.NONE && MetaDataUtils.getInstance().isMemberEmbedded(storeMgr.getMetaDataManager(), clr, mmd, relationType, null))
             {
-                // EMBEDDED FIELD
+                // EMBEDDED MEMBER
                 List<AbstractMemberMetaData> embMmds = new ArrayList<AbstractMemberMetaData>();
                 embMmds.add(mmd);
                 if (RelationType.isRelationSingleValued(relationType))
@@ -179,7 +184,7 @@ public class CompleteClassTable implements Table
                         {
                             schemaVerifier.attributeMember(mapping, mmd);
                         }
-                        mappingByMember.put(mmd, mapping);
+                        mappingByMember.put(mmd.getFullFieldName(), mapping);
 
                         // TODO Consider adding the embedded info under the above column as related information
                         processEmbeddedMember(embMmds, clr, mmd.getEmbeddedMetaData(), true);
@@ -219,7 +224,7 @@ public class CompleteClassTable implements Table
                             {
                                 schemaVerifier.attributeMember(mapping, mmd);
                             }
-                            mappingByMember.put(mmd, mapping);
+                            mappingByMember.put(mmd.getFullFieldName(), mapping);
 
                             // TODO Consider adding the embedded info under the above column as related information
                             EmbeddedMetaData embmd = mmd.getElementMetaData() != null ? mmd.getElementMetaData().getEmbeddedMetaData() : null;
@@ -258,7 +263,7 @@ public class CompleteClassTable implements Table
                             {
                                 schemaVerifier.attributeMember(mapping, mmd);
                             }
-                            mappingByMember.put(mmd, mapping);
+                            mappingByMember.put(mmd.getFullFieldName(), mapping);
                         }
 
                         NucleusLogger.DATASTORE_SCHEMA.warn("Member " + mmd.getFullFieldName() + " is an embedded map. Not yet supported. Ignoring");
@@ -291,7 +296,7 @@ public class CompleteClassTable implements Table
                             {
                                 schemaVerifier.attributeMember(mapping, mmd);
                             }
-                            mappingByMember.put(mmd, mapping);
+                            mappingByMember.put(mmd.getFullFieldName(), mapping);
 
                             // TODO Consider adding the embedded info under the above column as related information
                             EmbeddedMetaData embmd = mmd.getElementMetaData() != null ? mmd.getElementMetaData().getEmbeddedMetaData() : null;
@@ -307,6 +312,7 @@ public class CompleteClassTable implements Table
             }
             else
             {
+                // STANDARD MEMBER
                 ColumnMetaData[] colmds = mmd.getColumnMetaData();
                 if ((colmds == null || colmds.length == 0) && mmd.hasCollection() && mmd.getElementMetaData() != null)
                 {
@@ -338,7 +344,7 @@ public class CompleteClassTable implements Table
                     {
                         schemaVerifier.attributeMember(mapping, mmd);
                     }
-                    mappingByMember.put(mmd, mapping);
+                    mappingByMember.put(mmd.getFullFieldName(), mapping);
                 }
                 else
                 {
@@ -377,7 +383,7 @@ public class CompleteClassTable implements Table
                             {
                                 schemaVerifier.attributeMember(mapping, mmd);
                             }
-                            mappingByMember.put(mmd, mapping);
+                            mappingByMember.put(mmd.getFullFieldName(), mapping);
                         }
                         else
                         {
@@ -402,7 +408,7 @@ public class CompleteClassTable implements Table
                             {
                                 schemaVerifier.attributeMember(mapping, mmd);
                             }
-                            mappingByMember.put(mmd, mapping);
+                            mappingByMember.put(mmd.getFullFieldName(), mapping);
                         }
                     }
                     else
@@ -450,7 +456,7 @@ public class CompleteClassTable implements Table
                         {
                             schemaVerifier.attributeMember(mapping, mmd);
                         }
-                        mappingByMember.put(mmd, mapping);
+                        mappingByMember.put(mmd.getFullFieldName(), mapping);
                     }
                 }
             }
@@ -543,6 +549,19 @@ public class CompleteClassTable implements Table
             this.multitenancyColumn = col;
         }
 
+        if (cmd.hasExtension(MetaData.EXTENSION_CLASS_SOFTDELETE))
+        {
+            // Add surrogate soft-delete column TODO Cater for this specified in superclass applying to this class also?
+            String colName = storeMgr.getNamingFactory().getColumnName(cmd, ColumnType.SOFTDELETE_COLUMN);
+            Column col = addColumn(null, colName, ColumnType.SOFTDELETE_COLUMN);
+            col.setJdbcType(JdbcType.BOOLEAN);
+            if (schemaVerifier != null)
+            {
+                schemaVerifier.attributeMember(new MemberColumnMappingImpl(null, col));
+            }
+            this.softDeleteColumn = col;
+        }
+
         // Reorder all columns to respect column positioning information. Note this assumes the user has provided complete information
         List<Column> unorderedCols = new ArrayList();
         Column[] cols = new Column[columns.size()];
@@ -599,6 +618,7 @@ public class CompleteClassTable implements Table
                 }
                 else
                 {
+                    boolean allowAddition = true;
                     if (columnByName.containsKey(col.getName()))
                     {
                         Column otherCol = columnByName.get(col.getName());
@@ -611,6 +631,7 @@ public class CompleteClassTable implements Table
                             if (mapping.getMemberMetaData() instanceof PropertyMetaData && otherCol.getMemberColumnMapping().getMemberMetaData() instanceof PropertyMetaData)
                             {
                                 // We allow re-use of property names, since the subclass can override the superclass
+                                allowAddition = false;
                             }
                             else
                             {
@@ -621,8 +642,11 @@ public class CompleteClassTable implements Table
                             }
                         }
                     }
-                    columns.add(col);
-                    columnByName.put(col.getName(), col);
+                    if (allowAddition)
+                    {
+                        columns.add(col);
+                        columnByName.put(col.getName(), col);
+                    }
                 }
             }
             else
@@ -1110,24 +1134,41 @@ public class CompleteClassTable implements Table
         return columns.get(pos);
     }
 
-    public Column getDatastoreIdColumn()
+    /* (non-Javadoc)
+     * @see org.datanucleus.store.schema.table.Table#getSurrogateColumn(org.datanucleus.store.schema.table.SurrogateColumnType)
+     */
+    @Override
+    public Column getSurrogateColumn(SurrogateColumnType colType)
     {
-        return datastoreIdColumn;
-    }
-
-    public Column getVersionColumn()
-    {
-        return versionColumn;
-    }
-
-    public Column getDiscriminatorColumn()
-    {
-        return discriminatorColumn;
-    }
-
-    public Column getMultitenancyColumn()
-    {
-        return multitenancyColumn;
+        if (colType == SurrogateColumnType.DATASTORE_ID)
+        {
+            return datastoreIdColumn;
+        }
+        else if (colType == SurrogateColumnType.DISCRIMINATOR)
+        {
+            return discriminatorColumn;
+        }
+        else if (colType == SurrogateColumnType.VERSION)
+        {
+            return versionColumn;
+        }
+        else if (colType == SurrogateColumnType.MULTITENANCY)
+        {
+            return multitenancyColumn;
+        }
+        else if (colType == SurrogateColumnType.CREATE_TIMESTAMP)
+        {
+            // TODO Support this
+        }
+        else if (colType == SurrogateColumnType.UPDATE_TIMESTAMP)
+        {
+            // TODO Support this
+        }
+        else if (colType == SurrogateColumnType.SOFTDELETE)
+        {
+            return softDeleteColumn;
+        }
+        return null;
     }
 
     public Column getColumnForName(String name)
@@ -1146,7 +1187,7 @@ public class CompleteClassTable implements Table
 
     public MemberColumnMapping getMemberColumnMappingForMember(AbstractMemberMetaData mmd)
     {
-        return mappingByMember.get(mmd);
+        return mappingByMember.get(mmd.getFullFieldName());
     }
 
     public MemberColumnMapping getMemberColumnMappingForEmbeddedMember(List<AbstractMemberMetaData> mmds)

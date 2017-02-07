@@ -48,6 +48,9 @@ public class PropertyNames
     public static final String PROPERTY_METADATA_DEFAULT_NULLABLE = "datanucleus.metadata.defaultNullable";
     public static final String PROPERTY_METADATA_LISTENER_OBJECT = "datanucleus.metadata.listener.object";
 
+    public static final String PROPERTY_METADATA_USE_DISCRIMINATOR_FOR_SINGLE_TABLE = "datanucleus.metadata.useDiscriminatorForSingleTable";
+    public static final String PROPERTY_METADATA_USE_DISCRIMINATOR_DEFAULT_CLASS_NAME = "datanucleus.metadata.useDiscriminatorClassNameByDefault";
+
     public static final String PROPERTY_IGNORE_CACHE = "datanucleus.IgnoreCache";
     public static final String PROPERTY_OPTIMISTIC = "datanucleus.Optimistic";
     public static final String PROPERTY_MULTITHREADED = "datanucleus.Multithreaded";
@@ -72,6 +75,10 @@ public class PropertyNames
     public static final String PROPERTY_IDENTITY_KEY_TRANSLATOR_TYPE = "datanucleus.identityKeyTranslatorType";
     public static final String PROPERTY_USE_IMPLEMENTATION_CREATOR = "datanucleus.useImplementationCreator";
 
+    public static final String PROPERTY_RELATION_IDENTITY_STORAGE_MODE = "datanucleus.relation.identityStorageMode";
+
+    public static final String PROPERTY_VERSION_NUMBER_INITIAL_VALUE = "datanucleus.version.versionNumber.initialValue";
+
     public static final String PROPERTY_JMX_TYPE = "datanucleus.jmxType";
     public static final String PROPERTY_ENABLE_STATISTICS = "datanucleus.enableStatistics";
 
@@ -82,13 +89,13 @@ public class PropertyNames
     public static final String PROPERTY_OBJECT_PROVIDER_MAX_IDLE = "datanucleus.objectProvider.maxIdle";
     public static final String PROPERTY_OBJECT_PROVIDER_CLASS_NAME = "datanucleus.objectProvider.className";
 
-    public static final String PROPERTY_TRANSACTION_TYPE = "datanucleus.TransactionType";
-    public static final String PROPERTY_TRANSACTION_JTA_LOCATOR = "datanucleus.jtaLocator";
-    public static final String PROPERTY_TRANSACTION_JTA_JNDI_LOCATION = "datanucleus.jtaJndiLocation";
-    public static final String PROPERTY_TRANSACTION_ISOLATION = "datanucleus.transactionIsolation";
-    public static final String PROPERTY_NONTX_READ = "datanucleus.NontransactionalRead";
-    public static final String PROPERTY_NONTX_WRITE = "datanucleus.NontransactionalWrite";
-    public static final String PROPERTY_NONTX_ATOMIC = "datanucleus.nontx.atomic";
+    public static final String PROPERTY_TRANSACTION_TYPE = "datanucleus.transaction.type";
+    public static final String PROPERTY_TRANSACTION_ISOLATION = "datanucleus.transaction.isolation";
+    public static final String PROPERTY_TRANSACTION_JTA_LOCATOR = "datanucleus.transaction.jta.transactionManagerLocator";
+    public static final String PROPERTY_TRANSACTION_JTA_JNDI_LOCATION = "datanucleus.transaction.jta.transactionManagerJNDI";
+    public static final String PROPERTY_TRANSACTION_NONTX_READ = "datanucleus.transaction.nontx.read";
+    public static final String PROPERTY_TRANSACTION_NONTX_WRITE = "datanucleus.transaction.nontx.write";
+    public static final String PROPERTY_TRANSACTION_NONTX_ATOMIC = "datanucleus.transaction.nontx.atomic";
 
     public static final String PROPERTY_FLUSH_MODE = "datanucleus.flush.mode";
     public static final String PROPERTY_FLUSH_AUTO_OBJECT_LIMIT = "datanucleus.datastoreTransactionFlushLimit";
@@ -166,19 +173,16 @@ public class PropertyNames
 
     public static final String PROPERTY_STORE_ALLOW_REFS_WITHOUT_IMPLS = "datanucleus.store.allowReferencesWithNoImplementations";
 
-    public static final String PROPERTY_SCHEMA_GENERATE_CREATE_SCHEMAS = "datanucleus.generateSchema.create-schemas";
     public static final String PROPERTY_SCHEMA_GENERATE_DATABASE_MODE = "datanucleus.generateSchema.database.mode";
     public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_MODE = "datanucleus.generateSchema.scripts.mode";
     public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_CREATE_TARGET = "datanucleus.generateSchema.scripts.create.target";
     public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_DROP_TARGET = "datanucleus.generateSchema.scripts.drop.target";
     public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_CREATE_SOURCE = "datanucleus.generateSchema.scripts.create.source";
-    public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_CREATE_ORDER = "datanucleus.generateSchema.scripts.create.order";
     public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_DROP_SOURCE = "datanucleus.generateSchema.scripts.drop.source";
-    public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_DROP_ORDER = "datanucleus.generateSchema.scripts.drop.order";
     public static final String PROPERTY_SCHEMA_GENERATE_SCRIPTS_LOAD_SOURCE = "datanucleus.generateSchema.scripts.load";
 
     public static final String PROPERTY_SCHEMA_AUTOCREATE_ALL = "datanucleus.schema.autoCreateAll";
-    public static final String PROPERTY_SCHEMA_AUTOCREATE_SCHEMA = "datanucleus.schema.autoCreateSchema";
+    public static final String PROPERTY_SCHEMA_AUTOCREATE_DATABASE = "datanucleus.schema.autoCreateDatabase";
     public static final String PROPERTY_SCHEMA_AUTOCREATE_TABLES = "datanucleus.schema.autoCreateTables";
     public static final String PROPERTY_SCHEMA_AUTOCREATE_COLUMNS = "datanucleus.schema.autoCreateColumns";
     public static final String PROPERTY_SCHEMA_AUTOCREATE_CONSTRAINTS = "datanucleus.schema.autoCreateConstraints";
@@ -208,10 +212,11 @@ public class PropertyNames
 
     public static final String PROPERTY_QUERY_SQL_ALLOWALL = "datanucleus.query.sql.allowAll";
     public static final String PROPERTY_QUERY_JDOQL_ALLOWALL = "datanucleus.query.jdoql.allowAll";
+    public static final String PROPERTY_QUERY_JPQL_ALLOW_RANGE = "datanucleus.query.jpql.allowRange";
     public static final String PROPERTY_QUERY_FLUSH_BEFORE_EXECUTE = "datanucleus.query.flushBeforeExecution";
     public static final String PROPERTY_QUERY_USE_FETCHPLAN = "datanucleus.query.useFetchPlan";
     public static final String PROPERTY_QUERY_CHECK_UNUSED_PARAMS = "datanucleus.query.checkUnusedParameters";
-    public static final String PROPERTY_QUERY_COMPILE_OPTIMISED = "datanucleus.query.compileOptimised";
+    public static final String PROPERTY_QUERY_COMPILE_OPTIMISE_VAR_THIS = "datanucleus.query.compileOptimiseVarThis";
     public static final String PROPERTY_QUERY_LOAD_RESULTS_AT_COMMIT = "datanucleus.query.loadResultsAtCommit";
     public static final String PROPERTY_QUERY_COMPILATION_CACHED = "datanucleus.query.compilation.cached";
     public static final String PROPERTY_QUERY_RESULTS_CACHED = "datanucleus.query.results.cached";
